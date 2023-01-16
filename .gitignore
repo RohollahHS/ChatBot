@@ -1,3 +1,4 @@
 data/WikiQA/*.txt
 __pycache__
 .vscode
+data/save/*

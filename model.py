@@ -13,7 +13,9 @@ from config import (
     DECODER_N_LAYERS,
     DROPOUT,
     RNN_TYPE,
-    WIEGHT_DECAY
+    WIEGHT_DECAY,
+    SCHEDULER_LIMESTONES,
+    LR_DECAY_RATIO
 )
 from dataset import (
     voc,
@@ -199,6 +201,9 @@ encoder_optimizer = optim.Adam(encoder.parameters(), lr=LEARNING_RATE, weight_de
 decoder_optimizer = optim.Adam(
     decoder.parameters(), lr=LEARNING_RATE * DECODER_LEARNING_RATIO, weight_decay=WIEGHT_DECAY,
 )
+
+encoder_scheduler = optim.lr_scheduler.MultiStepLR(encoder_optimizer, milestones=SCHEDULER_LIMESTONES, gamma=LR_DECAY_RATIO)
+decoder_scheduler = optim.lr_scheduler.MultiStepLR(decoder_optimizer, milestones=SCHEDULER_LIMESTONES, gamma=LR_DECAY_RATIO)
 
 print()
 print("Nubmer of parameters for Encoder:")

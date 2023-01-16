@@ -42,6 +42,8 @@ parser.add_argument('--dropout', default=0.1, type=float)
 # Training options
 parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--lr', default=0.0001, type=float)
+parser.add_argument('--schedule', nargs='*', default=[1000, 2000, 3000], type=int)
+parser.add_argument('--lr_decay_ratio', default=0.1, type=float)
 parser.add_argument('--n_iteration', default=1000, type=int)
 parser.add_argument('--weight_decay', default=0.0005, type=float)
 parser.add_argument('--clip', default=50.0, type=float)
@@ -49,7 +51,7 @@ parser.add_argument('--teacher_forcing_ratio', default=1.0, type=float)
 parser.add_argument('--decoder_learning_ratio', default=5.0, type=float)
 
 parser.add_argument('--print_every', default=1, type=int)
-parser.add_argument('--save_every', default=500, type=int)
+parser.add_argument('--save_every', default=1, type=int)
 parser.add_argument('--load_file_name', default=None)
 parser.add_argument('--valid_every', default=1, type=int)
 
@@ -78,6 +80,8 @@ DROPOUT = args.dropout
 # Configure training/optimization
 BATCH_SIZE = args.batch_size
 LEARNING_RATE = args.lr
+SCHEDULER_LIMESTONES = args.schedule
+LR_DECAY_RATIO = args.lr_decay_ratio
 WIEGHT_DECAY = args.weight_decay
 N_ITERATION = args.n_iteration
 CLIP = args.clip
@@ -103,7 +107,7 @@ OUT_DIR = args.out_dir
 # FILE_NAME = "utterances_1000_sample.jsonl"
 # FILE_NAME_VALID = "utterances_valid.jsonl"
 
-MODEL_NAME = f"MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN_MODEL: {ATTN_MODEL}, RNN_TYPE: {RNN_TYPE}, HIDDEN_SIZE: {HIDDEN_SIZE}, ENCODER_N_LAYERS: {ENCODER_N_LAYERS}, DECODER_LEARNING_RATIO: {DECODER_LEARNING_RATIO}, BATCH_SIZE: {BATCH_SIZE}, TEACHER_FORCING_RATIO: {TEACHER_FORCING_RATIO}, LEARNING_RATE: {LEARNING_RATE}, DECODER_LEARNING_RATIO: {DECODER_LEARNING_RATIO}, {args.note}"
+MODEL_NAME = f"MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN: {ATTN_MODEL}, RNN: {RNN_TYPE}, HIDDEN: {HIDDEN_SIZE}, N_LAYERS: {ENCODER_N_LAYERS}, BATCH: {BATCH_SIZE}, TEACHER_RATIO: {TEACHER_FORCING_RATIO}, LR: {LEARNING_RATE}, DEC_LR_RATIO: {DECODER_LEARNING_RATIO}, N_ITERATION: {N_ITERATION}, {args.note}".strip()
 
 details = MODEL_NAME.split(',')
 print('Model details:')

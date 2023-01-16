@@ -37,8 +37,57 @@ from model import (
     decoder,
     encoder_optimizer,
     decoder_optimizer,
+    encoder_scheduler,
+    decoder_scheduler
 )
-from eval import searcher, evaluate
+
+class SaveBestModel:
+    """
+    Class to save the best model while training. If the current iteration's
+    validation mAP is higher than the previous least less, then save the
+    model state.
+    """
+
+    def __init__(self, best_valid=1000):
+        self.best_valid = best_valid
+
+    def __call__(
+        self,
+        best_valid,
+        iteration,
+        encoder,
+        decoder,
+        encoder_optimizer,
+        decoder_optimizer,
+        voc,
+        embedding,
+        train_loss_per_iteration,
+        valid_loss_per_iteration,
+        encoder_scheduler,
+        decoder_scheduler,
+        directory
+    ):
+        if best_valid < self.best_valid:
+            self.best_valid = best_valid
+            print(f"Best validation mAP: {self.best_valid}")
+            print(f"Saving best model for iteration: {iteration+1}")
+            torch.save(
+                {
+                    "iteration": iteration,
+                    "en": encoder.state_dict(),
+                    "de": decoder.state_dict(),
+                    "en_opt": encoder_optimizer.state_dict(),
+                    "de_opt": decoder_optimizer.state_dict(),
+                    "voc_dict": voc.__dict__,
+                    "embedding": embedding.state_dict(),
+                    "train_loss_per_iteration": train_loss_per_iteration,
+                    "valid_loss_per_iteration": valid_loss_per_iteration,
+                    "encoder_scheduler": encoder_scheduler.state_dict(),
+                    "decoder_scheduler": decoder_scheduler.state_dict()
+                },
+                os.path.join(directory, f"best_model_checkpoint.tar"),
+            )
+
 
 
 def maskNLLLoss(inp, target, mask):
@@ -144,6 +193,9 @@ def train(
     encoder_optimizer.step()
     decoder_optimizer.step()
 
+    encoder_scheduler.step()
+    decoder_scheduler.step()
+
     return sum(print_losses) / n_totals
 
 
@@ -182,6 +234,18 @@ def trainIters(
     if loadfilename:
         start_iteration = checkpoint["iteration"] + 1
 
+    train_loss_per_iteration = []
+    valid_loss_per_iteration = []
+
+    save_best_model = SaveBestModel()
+
+    directory = os.path.join(
+        save_dir,
+        model_name.replace(':', ''),
+    )
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     # Training loop
     # print("Training...")
     for iteration in range(start_iteration, n_iteration + 1):
@@ -216,42 +280,55 @@ def trainIters(
         valid_loss_txt.write(f'{iteration}: {loss_valid:.4f} | ')
         train_loss_txt.close()
         valid_loss_txt.close()
-
+        
+        train_loss_per_iteration.append(loss)
+        valid_loss_per_iteration.append(loss_valid)
 
         # Print progress
         if iteration % print_every == 0:
             print_loss_avg = print_loss / print_every
             print(
-                "Iteration: {}; {:.1f}%; Train loss: {:.4f}; Valid loss: {:.4f}".format(
-                    iteration, iteration / n_iteration * 100, print_loss_avg, loss_valid
+                "Iteration: {}/{}; Train loss: {:.4f}; Valid loss: {:.4f}".format(
+                    iteration, n_iteration, print_loss_avg, loss_valid
                 )
             )
             print_loss = 0
         
 
         # Save checkpoint
-        if iteration % save_every == 0:
-            directory = os.path.join(
-                save_dir,
-                model_name,
-                corpus_name,
-                "{}-{}_{}".format(encoder_n_layers, decoder_n_layers, HIDDEN_SIZE),
-            )
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+        if (iteration % save_every == 0) and (iteration > 500):
             torch.save(
                 {
-                    "iteration": iteration,
-                    "en": encoder.state_dict(),
-                    "de": decoder.state_dict(),
-                    "en_opt": encoder_optimizer.state_dict(),
-                    "de_opt": decoder_optimizer.state_dict(),
-                    "loss": loss,
-                    "voc_dict": voc.__dict__,
-                    "embedding": embedding.state_dict(),
+                "iteration": iteration,
+                "en": encoder.state_dict(),
+                "de": decoder.state_dict(),
+                "en_opt": encoder_optimizer.state_dict(),
+                "de_opt": decoder_optimizer.state_dict(),
+                "voc_dict": voc.__dict__,
+                "embedding": embedding.state_dict(),
+                "train_loss_per_iteration": train_loss_per_iteration,
+                "valid_loss_per_iteration": valid_loss_per_iteration,
+                "encoder_scheduler": encoder_scheduler.state_dict(),
+                "decoder_scheduler": decoder_scheduler.state_dict()
                 },
-                os.path.join(directory, "{}_{}.tar".format(iteration, "checkpoint")),
+                os.path.join(directory, f"last_model_checkpoint.tar"),
             )
+
+            save_best_model(
+                    loss_valid,
+                    iteration,
+                    encoder,
+                    decoder,
+                    encoder_optimizer,
+                    decoder_optimizer,
+                    voc,
+                    embedding,
+                    train_loss_per_iteration,
+                    valid_loss_per_iteration,
+                    encoder_scheduler,
+                    decoder_scheduler,
+                    directory
+                )
 
 
 def validation():
@@ -363,14 +440,14 @@ if LOADFILENAME:
 
 
 
-train_loss = open(f'{OUT_DIR}/train_loss.txt', 'a')
-valid_loss = open(f'{OUT_DIR}/valid_loss.txt', 'a')
+train_loss_txt = open(f'{OUT_DIR}/train_loss.txt', 'a')
+valid_loss_txt = open(f'{OUT_DIR}/valid_loss.txt', 'a')
 
-train_loss.write(f'\n{MODEL_NAME}\n')
-valid_loss.write(f'\n{MODEL_NAME}\n')
+train_loss_txt.write(f'\n{MODEL_NAME}\n')
+valid_loss_txt.write(f'\n{MODEL_NAME}\n')
 
-train_loss.close()
-valid_loss.close()
+train_loss_txt.close()
+valid_loss_txt.close()
 
 # Run training iterations
 print("Starting Training!")
