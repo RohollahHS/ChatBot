@@ -12,6 +12,7 @@ from config import (
     ENCODER_N_LAYERS,
     DECODER_N_LAYERS,
     DROPOUT,
+    RNN_TYPE
 )
 from dataset import (
     voc,
@@ -27,13 +28,22 @@ class EncoderRNN(nn.Module):
 
         # Initialize GRU; the input_size and hidden_size params are both set to 'hidden_size'
         #   because our input size is a word embedding with number of features == hidden_size
-        self.gru = nn.GRU(
-            hidden_size,
-            hidden_size,
-            n_layers,
-            dropout=(0 if n_layers == 1 else dropout),
-            bidirectional=True,
-        )
+        if RNN_TYPE == "LSTM":
+            self.lstm = nn.LSTM(
+                hidden_size,
+                hidden_size,
+                n_layers,
+                dropout=(0 if n_layers == 1 else dropout),
+                bidirectional=True,
+            )
+        elif RNN_TYPE == "GRU":
+            self.gru = nn.GRU(
+                hidden_size,
+                hidden_size,
+                n_layers,
+                dropout=(0 if n_layers == 1 else dropout),
+                bidirectional=True,
+            )
 
     def forward(self, input_seq, input_lengths, hidden=None):
         # Convert word indexes to embeddings
@@ -41,7 +51,11 @@ class EncoderRNN(nn.Module):
         # Pack padded batch of sequences for RNN module
         packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
         # Forward pass through GRU
-        outputs, hidden = self.gru(packed, hidden)
+        if RNN_TYPE == "LSTM":
+            outputs, hidden = self.lstm(packed) # hidden = hn, cn
+        elif RNN_TYPE == "GRU":
+            outputs, hidden = self.gru(packed, hidden)
+        
         # Unpack padding
         outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
         # Sum bidirectional GRU outputs
@@ -111,12 +125,21 @@ class LuongAttnDecoderRNN(nn.Module):
         # Define layers
         self.embedding = embedding
         self.embedding_dropout = nn.Dropout(dropout)
-        self.gru = nn.GRU(
-            hidden_size,
-            hidden_size,
-            n_layers,
-            dropout=(0 if n_layers == 1 else dropout),
-        )
+        if RNN_TYPE == "LSTM":
+            self.lstm = nn.LSTM(
+                hidden_size,
+                hidden_size,
+                n_layers,
+                dropout=(0 if n_layers == 1 else dropout),
+            )
+        elif RNN_TYPE == "GRU":
+            self.gru = nn.GRU(
+                hidden_size,
+                hidden_size,
+                n_layers,
+                dropout=(0 if n_layers == 1 else dropout),
+            )
+
         self.concat = nn.Linear(hidden_size * 2, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
 
@@ -127,8 +150,13 @@ class LuongAttnDecoderRNN(nn.Module):
         # Get embedding of current input word
         embedded = self.embedding(input_step)
         embedded = self.embedding_dropout(embedded)
+
         # Forward through unidirectional GRU
-        rnn_output, hidden = self.gru(embedded, last_hidden)
+        if RNN_TYPE == "LSTM":
+            rnn_output, hidden = self.lstm(embedded, last_hidden) # hidden = hn, cn
+        elif RNN_TYPE == "GRU":
+            rnn_output, hidden = self.gru(embedded, last_hidden)
+
         # Calculate attention weights from the current GRU output
         attn_weights = self.attn(rnn_output, encoder_outputs)
         # Multiply attention weights to encoder outputs to get new "weighted sum" context vector

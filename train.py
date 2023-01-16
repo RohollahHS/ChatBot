@@ -19,7 +19,8 @@ from config import (
     BATCH_SIZE,
     LOADFILENAME,
     CORPUS_NAME,
-    VALID_EVERY
+    VALID_EVERY,
+    RNN_TYPE
 )
 from dataset import (
     SOS_token,
@@ -91,7 +92,13 @@ def train(
     decoder_input = decoder_input.to(DEVICE)
 
     # Set initial decoder hidden state to the encoder's final hidden state
-    decoder_hidden = encoder_hidden[: decoder.n_layers]
+    if RNN_TYPE == "LSTM":
+        hn = encoder_hidden[0][: decoder.n_layers]
+        cn = encoder_hidden[1][: decoder.n_layers]
+        decoder_hidden = (hn, cn)
+    elif RNN_TYPE == "GRU":
+        decoder_hidden = encoder_hidden[: decoder.n_layers]
+    
 
     # Determine if we are using teacher forcing this iteration
     use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
@@ -294,7 +301,12 @@ def valid(
     decoder_input = decoder_input.to(DEVICE)
 
     # Set initial decoder hidden state to the encoder's final hidden state
-    decoder_hidden = encoder_hidden[: decoder.n_layers]
+    if RNN_TYPE == "LSTM":
+        hn = encoder_hidden[0][: decoder.n_layers]
+        cn = encoder_hidden[1][: decoder.n_layers]
+        decoder_hidden = (hn, cn)
+    elif RNN_TYPE == "GRU":
+        decoder_hidden = encoder_hidden[: decoder.n_layers]
 
     for t in range(max_target_len):
         decoder_output, decoder_hidden = decoder(
