@@ -240,7 +240,7 @@ def trainIters(
     save_best_model = SaveBestModel()
 
     directory = os.path.join(
-        save_dir,
+        OUT_DIR,
         model_name.replace(':', ''),
     )
     if not os.path.exists(directory):

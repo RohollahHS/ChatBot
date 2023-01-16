@@ -51,7 +51,7 @@ parser.add_argument('--teacher_forcing_ratio', default=1.0, type=float)
 parser.add_argument('--decoder_learning_ratio', default=5.0, type=float)
 
 parser.add_argument('--print_every', default=1, type=int)
-parser.add_argument('--save_every', default=1, type=int)
+parser.add_argument('--save_every', default=30, type=int)
 parser.add_argument('--load_file_name', default=None)
 parser.add_argument('--valid_every', default=1, type=int)
 
