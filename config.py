@@ -1,11 +1,15 @@
 import torch
+import sys
 
 USE_CUDA = torch.cuda.is_available()
 DEVICE = torch.device("cuda" if USE_CUDA else "cpu")
 
 
 # Configure models
-MODEL_NAME = "cb_model"
+if "HW3" in sys.argv[0]:
+    MODEL_NAME = "debugging"
+else:
+    MODEL_NAME = sys.argv[0]
 ATTN_MODEL = "dot"
 RNN_TYPE = "LSTM"
 # RNN_TYPE = "GRU"
@@ -35,7 +39,7 @@ MIN_COUNT = 1  # Minimum word count threshold for trimming
 CORPUS_NAME = "WikiQA"
 FILE_NAME = "WikiQA-train.tsv"
 FILE_NAME_VALID = "WikiQA-dev.tsv"
-
+OUT_DIR = "outputs"
 
 ##### Movie-Courpus Dataset
 # CORPUS_NAME = "movie-corpus"

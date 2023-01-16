@@ -20,7 +20,8 @@ from config import (
     LOADFILENAME,
     CORPUS_NAME,
     VALID_EVERY,
-    RNN_TYPE
+    RNN_TYPE,
+    OUT_DIR
 )
 from dataset import (
     SOS_token,
@@ -209,6 +210,14 @@ def trainIters(
             with torch.no_grad():
                 loss_valid = validation()
 
+        train_loss_txt = open(f'{OUT_DIR}/train_loss.txt', 'a')
+        valid_loss_txt = open(f'{OUT_DIR}/valid_loss.txt', 'a')
+        train_loss_txt.write(f'{iteration}: {loss:.4f} | ')
+        valid_loss_txt.write(f'{iteration}: {loss_valid:.4f} | ')
+        train_loss_txt.close()
+        valid_loss_txt.close()
+
+
         # Print progress
         if iteration % print_every == 0:
             print_loss_avg = print_loss / print_every
@@ -352,6 +361,16 @@ if LOADFILENAME:
     encoder_optimizer.load_state_dict(encoder_optimizer_sd)
     decoder_optimizer.load_state_dict(decoder_optimizer_sd)
 
+
+
+train_loss = open(f'{OUT_DIR}/train_loss.txt', 'a')
+valid_loss = open(f'{OUT_DIR}/valid_loss.txt', 'a')
+
+train_loss.write(f'\n{MODEL_NAME}\n')
+valid_loss.write(f'\n{MODEL_NAME}\n')
+
+train_loss.close()
+valid_loss.close()
 
 # Run training iterations
 print("Starting Training!")
