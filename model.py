@@ -12,7 +12,8 @@ from config import (
     ENCODER_N_LAYERS,
     DECODER_N_LAYERS,
     DROPOUT,
-    RNN_TYPE
+    RNN_TYPE,
+    WIEGHT_DECAY
 )
 from dataset import (
     voc,
@@ -176,7 +177,7 @@ class LuongAttnDecoderRNN(nn.Module):
 # Set checkpoint to load from; set to None if starting from scratch
 
 
-print("Building encoder and decoder ...")
+# print("Building encoder and decoder ...")
 # Initialize word embeddings
 embedding = nn.Embedding(voc.num_words, HIDDEN_SIZE)
 
@@ -189,14 +190,14 @@ decoder = LuongAttnDecoderRNN(
 # Use appropriate DEVICE
 encoder = encoder.to(DEVICE)
 decoder = decoder.to(DEVICE)
-print("Models built and ready to go!")
+# print("Models built and ready to go!")
 
 
 # Initialize optimizers
-print("Building optimizers ...")
-encoder_optimizer = optim.Adam(encoder.parameters(), lr=LEARNING_RATE)
+# print("Building optimizers ...")
+encoder_optimizer = optim.Adam(encoder.parameters(), lr=LEARNING_RATE, weight_decay=WIEGHT_DECAY)
 decoder_optimizer = optim.Adam(
-    decoder.parameters(), lr=LEARNING_RATE * DECODER_LEARNING_RATIO, weight_decay=1e-5,
+    decoder.parameters(), lr=LEARNING_RATE * DECODER_LEARNING_RATIO, weight_decay=WIEGHT_DECAY,
 )
 
 print()

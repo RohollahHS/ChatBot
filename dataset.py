@@ -142,7 +142,7 @@ def normalizeString(s):
 
 # Read query/response pairs and return a voc object
 def readVocs(datafile, corpus_name=CORPUS_NAME):
-    print("Reading lines...")
+    # print("Reading lines...")
     # Read the file and split into lines
     lines = open(datafile, encoding="utf-8").read().strip().split("\n")
     # Split every line into pairs and normalize
@@ -159,27 +159,28 @@ def filterPair(p):
 
 # Filter pairs using filterPair condition
 def filterPairs(pairs):
-    ql = []
-    al = []
-    for p in pairs:
-        ql.append(len(p[0].split()))
-        al.append(len(p[1].split()))
-    fig, axs = plt.subplots(2, 1, sharey=True, tight_layout=True)
+    # ql = []
+    # al = []
+    # for p in pairs:
+    #     ql.append(len(p[0].split()))
+    #     al.append(len(p[1].split()))
+    # fig, axs = plt.subplots(2, 1, sharey=True, tight_layout=True)
+    # axs[0].hist(ql, bins=10)
+    # axs[1].hist(al, bins=20)
+    # plt.show()
 
     # We can set the number of bins with the *bins* keyword argument.
-    axs[0].hist(ql, bins=10)
-    axs[1].hist(al, bins=20)
     return [pair for pair in pairs if filterPair(pair)]
 
 
 # Using the functions defined above, return a populated voc object and pairs list
 def loadPrepareData(corpus, corpus_name, datafile, save_dir):
-    print("Start preparing training data ...")
+    # print("Start preparing training data ...")
     voc, pairs = readVocs(datafile, corpus_name)
-    print("Read {!s} sentence pairs".format(len(pairs)))
+    print("Read {!s} sentence pairs for train".format(len(pairs)))
     pairs = filterPairs(pairs)
-    print("Trimmed to {!s} sentence pairs".format(len(pairs)))
-    print("Counting words...")
+    print("Trimmed to {!s} sentence pairs for train with MAX_LENGTH {}".format(len(pairs), MAX_LENGTH))
+    # print("Counting words...")
     for pair in pairs:
         voc.addSentence(pair[0])
         voc.addSentence(pair[1])
@@ -188,11 +189,11 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
 
 # Using the functions defined above, return a populated voc object and pairs list
 def loadPrepareDataValid(corpus, corpus_name, datafile, save_dir):
-    print("Start preparing training data ...")
+    # print("Start preparing training data ...")
     _, pairs = readVocs(datafile, corpus_name)
-    print("Read {!s} sentence pairs".format(len(pairs)))
+    print("Read {!s} sentence pairs for validation".format(len(pairs)))
     pairs = filterPairs(pairs)
-    print("Trimmed to {!s} sentence pairs".format(len(pairs)))
+    print("Trimmed to {!s} sentence pairs for validation with MAX_LENGTH {}".format(len(pairs), MAX_LENGTH))
     return pairs
 
 
@@ -222,8 +223,8 @@ def trimRareWords(voc, pairs, MIN_COUNT):
             keep_pairs.append(pair)
 
     print(
-        "Trimmed from {} pairs to {}, {:.4f} of total".format(
-            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)
+        "Trimmed from {} pairs to {}, {:.4f} of total for train with MIN_COUNT {}".format(
+            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs), MIN_COUNT
         )
     )
     return keep_pairs
@@ -252,8 +253,8 @@ def trimRareWordsValid(voc, pairs, MIN_COUNT):
             keep_pairs.append(pair)
 
     print(
-        "Trimmed from {} pairs to {}, {:.4f} of total".format(
-            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs)
+        "Trimmed from {} pairs to {}, {:.4f} of total for validation with MIN_COUNT {}".format(
+            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs), MIN_COUNT
         )
     )
     return keep_pairs
@@ -314,8 +315,8 @@ def batch2TrainData(voc, pair_batch):
 # corpus_name = "movie-corpus"
 corpus = os.path.join("data", CORPUS_NAME)
 
-printLines(os.path.join(corpus, FILE_NAME))
-printLines(os.path.join(corpus, FILE_NAME_VALID))
+# printLines(os.path.join(corpus, FILE_NAME))
+# printLines(os.path.join(corpus, FILE_NAME_VALID))
 
 # Define path to new file
 datafile = os.path.join(corpus, "formatted_movie_lines.txt")
@@ -329,7 +330,7 @@ delimiter = str(codecs.decode(delimiter, "unicode_escape"))
 lines = {}
 conversations = {}
 # Load lines and conversations
-print("\nProcessing corpus into lines and conversations...")
+# print("\nProcessing corpus into lines and conversations...")
 questions = loadLinesAndConversations(
     os.path.join(corpus, FILE_NAME)
 )
@@ -338,7 +339,7 @@ questions_valid = loadLinesAndConversations(
 )
 
 # Write new csv file
-print("\nWriting newly formatted file...")
+# print("\nWriting newly formatted file...")
 
 with open(datafile, "w", encoding="utf-8") as outputfile:
     writer = csv.writer(outputfile, delimiter=delimiter, lineterminator="\n")
@@ -352,9 +353,9 @@ with open(datafile_valid, "w", encoding="utf-8") as outputfile:
 
 
 # Print a sample of lines
-print("\nSample lines from file:")
-printLines(datafile)
-printLines(datafile_valid)
+# print("\nSample lines from file:")
+# printLines(datafile)
+# printLines(datafile_valid)
 
 
 # Load/Assemble voc and pairs
@@ -362,23 +363,26 @@ save_dir = os.path.join("data", "save")
 voc, pairs = loadPrepareData(corpus, CORPUS_NAME, datafile, save_dir)
 pairs_valid = loadPrepareDataValid(corpus, CORPUS_NAME, datafile_valid, save_dir)
 # Print some pairs to validate
-print("\npairs:")
-for pair in pairs[:10]:
-    print(pair)
+# print("\npairs:")
+# for pair in pairs[:10]:
+#     print(pair)
 
 
 # Trim voc and pairs
 pairs = trimRareWords(voc, pairs, MIN_COUNT)
 pairs_valid = trimRareWordsValid(voc, pairs_valid, MIN_COUNT)
 
+print('\nNumber of train samples: ', len(pairs))
+print('Number of valid samples: ', len(pairs_valid))
 
-# Example for validation
-small_batch_size = 5
-batches = batch2TrainData(voc, [random.choice(pairs) for _ in range(small_batch_size)])
-input_variable, lengths, target_variable, mask, max_target_len = batches
 
-print("input_variable:", input_variable)
-print("lengths:", lengths)
-print("target_variable:", target_variable)
-print("mask:", mask)
-print("max_target_len:", max_target_len)
+# # Example for validation
+# small_batch_size = 5
+# batches = batch2TrainData(voc, [random.choice(pairs) for _ in range(small_batch_size)])
+# input_variable, lengths, target_variable, mask, max_target_len = batches
+
+# print("input_variable:", input_variable)
+# print("lengths:", lengths)
+# print("target_variable:", target_variable)
+# print("mask:", mask)
+# print("max_target_len:", max_target_len)

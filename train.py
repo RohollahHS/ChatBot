@@ -168,7 +168,7 @@ def trainIters(
     loadfilename,
 ):
     
-    print("Initializing ...")
+    # print("Initializing ...")
 
     # Load batches for each iteration
     training_batches = [
@@ -183,7 +183,7 @@ def trainIters(
         start_iteration = checkpoint["iteration"] + 1
 
     # Training loop
-    print("Training...")
+    # print("Training...")
     for iteration in range(start_iteration, n_iteration + 1):
         training_batch = training_batches[iteration - 1]
         # Extract fields from batch
@@ -222,7 +222,7 @@ def trainIters(
         if iteration % print_every == 0:
             print_loss_avg = print_loss / print_every
             print(
-                "Iteration: {}; Percent complete: {:.1f}%; Train loss: {:.4f}; Valid loss: {:.4f}".format(
+                "Iteration: {}; {:.1f}%; Train loss: {:.4f}; Valid loss: {:.4f}".format(
                     iteration, iteration / n_iteration * 100, print_loss_avg, loss_valid
                 )
             )
