@@ -11,7 +11,16 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from config import MAX_LENGTH, MIN_COUNT, CORPUS_NAME, FILE_NAME, FILE_NAME_VALID, ALL_DATA
+from config import (
+    MAX_LENGTH,
+    MIN_COUNT,
+    CORPUS_NAME,
+    FILE_NAME,
+    FILE_NAME_VALID,
+    ALL_SETS,
+    ALL_LABELS,
+    ALL_LABELS_1
+)
 
 
 def printLines(file, n=10):
@@ -25,39 +34,57 @@ def printLines(file, n=10):
 def loadLinesAndConversations(fileName):
     questions = {}
 
-    df = pd.read_csv(fileName, delimiter = "\t")
+    # just for train this block exucuted if the condition meet
+    if (FILE_NAME in fileName) and ALL_SETS: 
+        dirs = fileName.split("\\")
+        df1 = pd.read_csv(f"{dirs[0]}/{dirs[1]}/WikiQA-train.tsv", delimiter="\t")
+        df2 = pd.read_csv(f"{dirs[0]}/{dirs[1]}/WikiQA-dev.tsv", delimiter="\t")
+        df3 = pd.read_csv(f"{dirs[0]}/{dirs[1]}/WikiQA-test.tsv", delimiter="\t")
+        df = pd.concat([df1, df2, df3])
 
-    i = 0
-    for d in range(df.shape[0]):
-        row = df.iloc[d]
+    else:
+        df = pd.read_csv(fileName, delimiter="\t")
 
-        if ALL_DATA:
+    # all questions and answers, wether its labels is 1 or 0
+    if (ALL_LABELS==True) and (ALL_LABELS_1==False):
+        i = 0
+        for d in range(df.shape[0]):
+            row = df.iloc[d]
             qa = {}
-            qa['q'] = row["Question"]
-            qa['a'] = row["Sentence"]
+            qa["q"] = row["Question"]
+            qa["a"] = row["Sentence"]
             questions[i] = qa
             i += 1
-
-        else:
-            if row["Label"] == 1:
-                Id = row["QuestionID"]
-                if Id not in questions.keys():
-                    qa = {}
-                    qa['q'] = row["Question"]
-                    qa['a'] = row["Sentence"]
-                    questions[Id] = qa
-
-                else:
-                    qa = {}
-                    qa['q'] = row["Question"]
-                    qa['a'] = row["Sentence"]
-
-                    for i in range(1, 11):
-                        if Id+f'_{i}' not in questions.keys():
-                            questions[Id+f'_{i}'] = qa
-                            break
+        
+        return questions
     
-    return questions
+    # all questions & answers with label 1, even questions that have multiple label 1'
+    elif (ALL_LABELS_1==True) and (ALL_LABELS==False):
+        i = 0
+        for d in range(df.shape[0]):
+            row = df.iloc[d]
+            if row["Label"] == 1:
+                qa = {}
+                qa["q"] = row["Question"]
+                qa["a"] = row["Sentence"]
+                questions[i] = qa
+                i += 1
+        
+        return questions
+
+    # all questions with label 1, and for each question just one answer exists
+    elif (ALL_LABELS_1==False) and (ALL_LABELS==False):
+        for d in range(df.shape[0]):
+            row = df.iloc[d]
+            Id = row["QuestionID"]
+            if (row["Label"] == 1) and (Id not in questions.keys()):
+                qa = {}
+                qa["q"] = row["Question"]
+                qa["a"] = row["Sentence"]
+                questions[Id] = qa
+        
+        return questions
+    
 
 
 # Extracts pairs of sentences from conversations
@@ -65,8 +92,8 @@ def extractSentencePairs(question_answer):
     qa_pairs = []
     for qa in question_answer.values():
         # Iterate over all the lines of the conversation
-        inputLine = qa['q']
-        targetLine = qa['a']
+        inputLine = qa["q"]
+        targetLine = qa["a"]
         # Filter wrong samples (if one of the lists is empty)
         if inputLine and targetLine:
             qa_pairs.append([inputLine, targetLine])
@@ -77,6 +104,7 @@ def extractSentencePairs(question_answer):
 PAD_token = 0  # Used for padding short sentences
 SOS_token = 1  # Start-of-sentence token
 EOS_token = 2  # End-of-sentence token
+
 
 class Voc:
     def __init__(self, name):
@@ -189,7 +217,11 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
     voc, pairs = readVocs(datafile, corpus_name)
     print("Read {!s} sentence pairs for train".format(len(pairs)))
     pairs = filterPairs(pairs)
-    print("Trimmed to {!s} sentence pairs for train with MAX_LENGTH {}".format(len(pairs), MAX_LENGTH))
+    print(
+        "Trimmed to {!s} sentence pairs for train with MAX_LENGTH {}".format(
+            len(pairs), MAX_LENGTH
+        )
+    )
     # print("Counting words...")
     for pair in pairs:
         voc.addSentence(pair[0])
@@ -197,13 +229,18 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
     print("Counted words:", voc.num_words)
     return voc, pairs
 
+
 # Using the functions defined above, return a populated voc object and pairs list
 def loadPrepareDataValid(corpus, corpus_name, datafile, save_dir):
     # print("Start preparing training data ...")
     _, pairs = readVocs(datafile, corpus_name)
     print("Read {!s} sentence pairs for validation".format(len(pairs)))
     pairs = filterPairs(pairs)
-    print("Trimmed to {!s} sentence pairs for validation with MAX_LENGTH {}".format(len(pairs), MAX_LENGTH))
+    print(
+        "Trimmed to {!s} sentence pairs for validation with MAX_LENGTH {}".format(
+            len(pairs), MAX_LENGTH
+        )
+    )
     return pairs
 
 
@@ -238,6 +275,7 @@ def trimRareWords(voc, pairs, MIN_COUNT):
         )
     )
     return keep_pairs
+
 
 def trimRareWordsValid(voc, pairs, MIN_COUNT):
     # Filter out pairs with trimmed words
@@ -341,12 +379,8 @@ lines = {}
 conversations = {}
 # Load lines and conversations
 # print("\nProcessing corpus into lines and conversations...")
-questions = loadLinesAndConversations(
-    os.path.join(corpus, FILE_NAME)
-)
-questions_valid = loadLinesAndConversations(
-    os.path.join(corpus, FILE_NAME_VALID)
-)
+questions = loadLinesAndConversations(os.path.join(corpus, FILE_NAME))
+questions_valid = loadLinesAndConversations(os.path.join(corpus, FILE_NAME_VALID))
 
 # Write new csv file
 # print("\nWriting newly formatted file...")
@@ -382,8 +416,8 @@ pairs_valid = loadPrepareDataValid(corpus, CORPUS_NAME, datafile_valid, save_dir
 pairs = trimRareWords(voc, pairs, MIN_COUNT)
 pairs_valid = trimRareWordsValid(voc, pairs_valid, MIN_COUNT)
 
-print('\nNumber of train samples: ', len(pairs))
-print('Number of valid samples: ', len(pairs_valid))
+print("\nNumber of train samples: ", len(pairs))
+print("Number of valid samples: ", len(pairs_valid))
 
 
 # # Example for validation

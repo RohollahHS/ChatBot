@@ -57,10 +57,12 @@ parser.add_argument('--valid_every', default=1, type=int)
 parser.add_argument('--start_save', default=1, type=int)
 
 # Dataset options
-parser.add_argument('--all_data', default=False, type=bool)
-parser.add_argument('--max_length', default=20, type=int)
-parser.add_argument('--min_count', default=3, type=int)
+parser.add_argument('--all_labels', default=False, type=bool)
+parser.add_argument('--all_labels_1', default=True, type=bool)
+parser.add_argument('--max_length', default=80, type=int)
+parser.add_argument('--min_count', default=1, type=int)
 parser.add_argument('--corpus_name', default="WikiQA", type=str)
+parser.add_argument('--all_sets', default=False, type=bool)
 parser.add_argument('--file_name', default="WikiQA-train.tsv", type=str)
 parser.add_argument('--file_name_valid', default="WikiQA-dev.tsv", type=str)
 parser.add_argument('--out_dir', default="outputs", type=str)
@@ -96,13 +98,15 @@ VALID_EVERY = args.valid_every
 START_SAVE = args.start_save
 
 ##### WikiQA Dataset
-ALL_DATA = args.all_data
+ALL_LABELS = args.all_labels
+ALL_LABELS_1 = args.all_labels_1
 MAX_LENGTH = args.max_length  # Maximum sentence length to consider
 MIN_COUNT = args.min_count  # Minimum word count threshold for trimming
 CORPUS_NAME = args.corpus_name
 FILE_NAME = args.file_name
 FILE_NAME_VALID = args.file_name_valid
 OUT_DIR = args.out_dir
+ALL_SETS = args.all_sets
 
 ##### Movie-Courpus Dataset
 # CORPUS_NAME = "movie-corpus"
@@ -110,7 +114,7 @@ OUT_DIR = args.out_dir
 # FILE_NAME = "utterances_1000_sample.jsonl"
 # FILE_NAME_VALID = "utterances_valid.jsonl"
 
-MODEL_NAME = f"ALL_DATA: {ALL_DATA}, MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN: {ATTN_MODEL}, RNN: {RNN_TYPE}, HIDDEN: {HIDDEN_SIZE}, N_LAYERS: {ENCODER_N_LAYERS}, BATCH: {BATCH_SIZE}, TEACHER_RATIO: {TEACHER_FORCING_RATIO}, LR: {LEARNING_RATE}, DEC_LR_RATIO: {DECODER_LEARNING_RATIO}, N_ITERATION: {N_ITERATION}, {args.note}".strip()
+MODEL_NAME = f"ALL_LABELS: {ALL_LABELS}, ALL_LABELS_1: {ALL_LABELS_1}, MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN: {ATTN_MODEL}, RNN: {RNN_TYPE}, HIDDEN: {HIDDEN_SIZE}, N_LAYERS: {ENCODER_N_LAYERS}, BATCH: {BATCH_SIZE}, TEACHER_RATIO: {TEACHER_FORCING_RATIO}, LR: {LEARNING_RATE}, DEC_LR_RATIO: {DECODER_LEARNING_RATIO}, N_ITERATION: {N_ITERATION}, {args.note}".strip()
 
 details = MODEL_NAME.split(',')
 print('\nModel details:')
