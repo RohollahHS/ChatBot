@@ -32,7 +32,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 # Model options
-parser.add_argument('--rnn_type', default="GRU", type=str, choices=["GRU", "LSTM"])
+parser.add_argument('--rnn_type', default="LSTM", type=str, choices=["GRU", "LSTM"])
 parser.add_argument('--attn_model', default="dot", type=str, choices=["dot", "general", "concat"])
 parser.add_argument('--hidden_size', default=512, type=int)
 parser.add_argument('--encoder_n_layers', default=2, type=int)
@@ -51,13 +51,15 @@ parser.add_argument('--teacher_forcing_ratio', default=1.0, type=float)
 parser.add_argument('--decoder_learning_ratio', default=5.0, type=float)
 
 parser.add_argument('--print_every', default=1, type=int)
-parser.add_argument('--save_every', default=30, type=int)
+parser.add_argument('--save_every', default=1, type=int)
 parser.add_argument('--load_file_name', default=None)
 parser.add_argument('--valid_every', default=1, type=int)
+parser.add_argument('--start_save', default=1, type=int)
 
 # Dataset options
-parser.add_argument('--max_length', default=80, type=int)
-parser.add_argument('--min_count', default=1, type=int)
+parser.add_argument('--all_data', default=False, type=bool)
+parser.add_argument('--max_length', default=20, type=int)
+parser.add_argument('--min_count', default=3, type=int)
 parser.add_argument('--corpus_name', default="WikiQA", type=str)
 parser.add_argument('--file_name', default="WikiQA-train.tsv", type=str)
 parser.add_argument('--file_name_valid', default="WikiQA-dev.tsv", type=str)
@@ -91,9 +93,10 @@ PRINT_EVERY = args.print_every
 SAVE_EVERY = args.save_every
 LOADFILENAME = args.load_file_name
 VALID_EVERY = args.valid_every
-
+START_SAVE = args.start_save
 
 ##### WikiQA Dataset
+ALL_DATA = args.all_data
 MAX_LENGTH = args.max_length  # Maximum sentence length to consider
 MIN_COUNT = args.min_count  # Minimum word count threshold for trimming
 CORPUS_NAME = args.corpus_name
@@ -107,9 +110,9 @@ OUT_DIR = args.out_dir
 # FILE_NAME = "utterances_1000_sample.jsonl"
 # FILE_NAME_VALID = "utterances_valid.jsonl"
 
-MODEL_NAME = f"MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN: {ATTN_MODEL}, RNN: {RNN_TYPE}, HIDDEN: {HIDDEN_SIZE}, N_LAYERS: {ENCODER_N_LAYERS}, BATCH: {BATCH_SIZE}, TEACHER_RATIO: {TEACHER_FORCING_RATIO}, LR: {LEARNING_RATE}, DEC_LR_RATIO: {DECODER_LEARNING_RATIO}, N_ITERATION: {N_ITERATION}, {args.note}".strip()
+MODEL_NAME = f"ALL_DATA: {ALL_DATA}, MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN: {ATTN_MODEL}, RNN: {RNN_TYPE}, HIDDEN: {HIDDEN_SIZE}, N_LAYERS: {ENCODER_N_LAYERS}, BATCH: {BATCH_SIZE}, TEACHER_RATIO: {TEACHER_FORCING_RATIO}, LR: {LEARNING_RATE}, DEC_LR_RATIO: {DECODER_LEARNING_RATIO}, N_ITERATION: {N_ITERATION}, {args.note}".strip()
 
 details = MODEL_NAME.split(',')
-print('Model details:')
+print('\nModel details:')
 for d in details:
     print(d.strip())

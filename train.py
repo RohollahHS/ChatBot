@@ -21,7 +21,8 @@ from config import (
     CORPUS_NAME,
     VALID_EVERY,
     RNN_TYPE,
-    OUT_DIR
+    OUT_DIR,
+    START_SAVE
 )
 from dataset import (
     SOS_token,
@@ -40,53 +41,7 @@ from model import (
     encoder_scheduler,
     decoder_scheduler
 )
-
-class SaveBestModel:
-    """
-    Class to save the best model while training. If the current iteration's
-    validation mAP is higher than the previous least less, then save the
-    model state.
-    """
-
-    def __init__(self, best_valid=1000):
-        self.best_valid = best_valid
-
-    def __call__(
-        self,
-        best_valid,
-        iteration,
-        encoder,
-        decoder,
-        encoder_optimizer,
-        decoder_optimizer,
-        voc,
-        embedding,
-        train_loss_per_iteration,
-        valid_loss_per_iteration,
-        encoder_scheduler,
-        decoder_scheduler,
-        directory
-    ):
-        if best_valid < self.best_valid:
-            self.best_valid = best_valid
-            print(f"Best validation mAP: {self.best_valid}")
-            print(f"Saving best model for iteration: {iteration+1}")
-            torch.save(
-                {
-                    "iteration": iteration,
-                    "en": encoder.state_dict(),
-                    "de": decoder.state_dict(),
-                    "en_opt": encoder_optimizer.state_dict(),
-                    "de_opt": decoder_optimizer.state_dict(),
-                    "voc_dict": voc.__dict__,
-                    "embedding": embedding.state_dict(),
-                    "train_loss_per_iteration": train_loss_per_iteration,
-                    "valid_loss_per_iteration": valid_loss_per_iteration,
-                    "encoder_scheduler": encoder_scheduler.state_dict(),
-                    "decoder_scheduler": decoder_scheduler.state_dict()
-                },
-                os.path.join(directory, f"best_model_checkpoint.tar"),
-            )
+from utils import SaveBestModel
 
 
 
@@ -286,17 +241,45 @@ def trainIters(
 
         # Print progress
         if iteration % print_every == 0:
-            print_loss_avg = print_loss / print_every
-            print(
-                "Iteration: {}/{}; Train loss: {:.4f}; Valid loss: {:.4f}".format(
-                    iteration, n_iteration, print_loss_avg, loss_valid
+            if loss_valid < save_best_model.best_valid:
+                print_loss_avg = print_loss / print_every
+                print(
+                    "| Iteration: {:4}/{} | Train loss: {:.4f} | Valid loss: {:.4f} | Save best model ... |".format(
+                        iteration, n_iteration, print_loss_avg, loss_valid
+                    )
                 )
-            )
-            print_loss = 0
+                print('+' + 22*'-' + '+' + 20*'-' + '+' + 20*'-' + '+' + 21*'-' + '+')
+                print_loss = 0
+
+            else:
+                print_loss_avg = print_loss / print_every
+                print(
+                    "| Iteration: {:4}/{} | Train loss: {:.4f} | Valid loss: {:.4f} |".format(
+                        iteration, n_iteration, print_loss_avg, loss_valid
+                    )
+                )
+                print('+' + 22*'-' + '+' + 20*'-' + '+' + 20*'-' + '+')
+                print_loss = 0
         
 
         # Save checkpoint
-        if (iteration % save_every == 0) and (iteration > 500):
+        if (iteration % save_every == 0) and (iteration >= START_SAVE):
+            save_best_model(
+                    loss_valid,
+                    iteration,
+                    encoder,
+                    decoder,
+                    encoder_optimizer,
+                    decoder_optimizer,
+                    voc,
+                    embedding,
+                    train_loss_per_iteration,
+                    valid_loss_per_iteration,
+                    encoder_scheduler,
+                    decoder_scheduler,
+                    directory
+                )
+
             torch.save(
                 {
                 "iteration": iteration,
@@ -314,27 +297,13 @@ def trainIters(
                 os.path.join(directory, f"last_model_checkpoint.tar"),
             )
 
-            save_best_model(
-                    loss_valid,
-                    iteration,
-                    encoder,
-                    decoder,
-                    encoder_optimizer,
-                    decoder_optimizer,
-                    voc,
-                    embedding,
-                    train_loss_per_iteration,
-                    valid_loss_per_iteration,
-                    encoder_scheduler,
-                    decoder_scheduler,
-                    directory
-                )
 
 
 def validation():
     batch_size_valid = 1
     encoder.eval()
     decoder.eval()
+    print_loss = 0
     for i in range(len(pairs_valid)):
         valid_sample = [batch2TrainData(voc, pairs_valid[i:i+1])]
         input_variable, lengths, target_variable, mask, max_target_len = valid_sample[0]
@@ -439,7 +408,6 @@ if LOADFILENAME:
     decoder_optimizer.load_state_dict(decoder_optimizer_sd)
 
 
-
 train_loss_txt = open(f'{OUT_DIR}/train_loss.txt', 'a')
 valid_loss_txt = open(f'{OUT_DIR}/valid_loss.txt', 'a')
 
@@ -450,7 +418,7 @@ train_loss_txt.close()
 valid_loss_txt.close()
 
 # Run training iterations
-print("Starting Training!")
+print("Starting Training!\n")
 trainIters(
     MODEL_NAME,
     voc,

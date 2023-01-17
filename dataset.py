@@ -11,7 +11,7 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from config import MAX_LENGTH, MIN_COUNT, CORPUS_NAME, FILE_NAME, FILE_NAME_VALID
+from config import MAX_LENGTH, MIN_COUNT, CORPUS_NAME, FILE_NAME, FILE_NAME_VALID, ALL_DATA
 
 
 def printLines(file, n=10):
@@ -26,26 +26,36 @@ def loadLinesAndConversations(fileName):
     questions = {}
 
     df = pd.read_csv(fileName, delimiter = "\t")
+
+    i = 0
     for d in range(df.shape[0]):
         row = df.iloc[d]
 
-        if row["Label"] == 1:
-            Id = row["QuestionID"]
-            if Id not in questions.keys():
-                qa = {}
-                qa['q'] = row["Question"]
-                qa['a'] = row["Sentence"]
-                questions[Id] = qa
+        if ALL_DATA:
+            qa = {}
+            qa['q'] = row["Question"]
+            qa['a'] = row["Sentence"]
+            questions[i] = qa
+            i += 1
 
-            else:
-                qa = {}
-                qa['q'] = row["Question"]
-                qa['a'] = row["Sentence"]
+        else:
+            if row["Label"] == 1:
+                Id = row["QuestionID"]
+                if Id not in questions.keys():
+                    qa = {}
+                    qa['q'] = row["Question"]
+                    qa['a'] = row["Sentence"]
+                    questions[Id] = qa
 
-                for i in range(1, 11):
-                    if Id+f'_{i}' not in questions.keys():
-                        questions[Id+f'_{i}'] = qa
-                        break
+                else:
+                    qa = {}
+                    qa['q'] = row["Question"]
+                    qa['a'] = row["Sentence"]
+
+                    for i in range(1, 11):
+                        if Id+f'_{i}' not in questions.keys():
+                            questions[Id+f'_{i}'] = qa
+                            break
     
     return questions
 
