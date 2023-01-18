@@ -65,6 +65,7 @@ parser.add_argument('--corpus_name', default="WikiQA", type=str)
 parser.add_argument('--all_sets', default=False, type=bool)
 parser.add_argument('--file_name', default="WikiQA-train.tsv", type=str)
 parser.add_argument('--file_name_valid', default="WikiQA-dev.tsv", type=str)
+parser.add_argument('--file_name_test', default="WikiQA-test.tsv", type=str)
 parser.add_argument('--out_dir', default="outputs", type=str)
 parser.add_argument('--note', default="", type=str)
 
@@ -105,6 +106,7 @@ MIN_COUNT = args.min_count  # Minimum word count threshold for trimming
 CORPUS_NAME = args.corpus_name
 FILE_NAME = args.file_name
 FILE_NAME_VALID = args.file_name_valid
+FILE_NAME_TEST = args.file_name_test
 OUT_DIR = args.out_dir
 ALL_SETS = args.all_sets
 

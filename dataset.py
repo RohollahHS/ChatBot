@@ -19,7 +19,8 @@ from config import (
     FILE_NAME_VALID,
     ALL_SETS,
     ALL_LABELS,
-    ALL_LABELS_1
+    ALL_LABELS_1,
+    FILE_NAME_TEST
 )
 
 
@@ -36,10 +37,9 @@ def loadLinesAndConversations(fileName):
 
     # just for train this block exucuted if the condition meet
     if (FILE_NAME in fileName) and ALL_SETS: 
-        dirs = fileName.split("\\")
-        df1 = pd.read_csv(f"{dirs[0]}/{dirs[1]}/WikiQA-train.tsv", delimiter="\t")
-        df2 = pd.read_csv(f"{dirs[0]}/{dirs[1]}/WikiQA-dev.tsv", delimiter="\t")
-        df3 = pd.read_csv(f"{dirs[0]}/{dirs[1]}/WikiQA-test.tsv", delimiter="\t")
+        df1 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME), delimiter="\t")
+        df2 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME_VALID), delimiter="\t")
+        df3 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME_TEST), delimiter="\t")
         df = pd.concat([df1, df2, df3])
 
     else:
