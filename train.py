@@ -23,8 +23,10 @@ from dataset import (
     SOS_token,
     batch2TrainData,
     voc,
-    train_loader,
-    valid_loader,
+    # train_loader,
+    # valid_loader,
+    pairs,
+    pairs_valid
 )
 from model import (
     embedding,
@@ -152,9 +154,9 @@ def validIters():
     decoder.eval()
 
     print_loss = 0
-
-    for x, y in valid_loader:
-        valid_batch = batch2TrainData(voc, [[q, a] for q, a in zip(x, y)])
+    batches = [pairs_valid[i:i+BATCH_SIZE] for i in range(0, len(pairs_valid), BATCH_SIZE)]
+    for batch in batches:
+        valid_batch = batch2TrainData(voc, batch)
         input_variable, lengths, target_variable, mask, max_target_len = valid_batch
         
         loss = valid(
@@ -169,10 +171,10 @@ def validIters():
 
         print_loss += loss
     
-    if len(valid_loader) == 0:
+    if len(batches) == 0:
         return 0
     
-    return print_loss / len(valid_loader)
+    return print_loss / len(batches)
 
 
 def valid(
@@ -233,7 +235,7 @@ def valid(
 def trainIters(
     model_name,
     voc,
-    train_loader,
+    # train_loader,
     encoder,
     decoder,
     encoder_optimizer,
@@ -260,10 +262,11 @@ def trainIters(
         os.makedirs(directory)
 
     print_loss = 0
-    # Training loop
     for epoch in range(start_epoch, n_epoch + 1):
-        for x, y in train_loader:
-            training_batch = batch2TrainData(voc, [[q, a] for q, a in zip(x, y)])
+        random.shuffle(pairs)
+        batches = [pairs[i:i+BATCH_SIZE] for i in range(0, len(pairs), BATCH_SIZE)]
+        for batch in batches:
+            training_batch = batch2TrainData(voc, batch)
             input_variable, lengths, target_variable, mask, max_target_len = training_batch
 
             # Run a training epoch with batch
@@ -283,7 +286,7 @@ def trainIters(
             )
             print_loss += loss
 
-        print_loss_avg = print_loss / len(train_loader)
+        print_loss_avg = print_loss / len(batches)
 
         with torch.no_grad():
             loss_valid = validIters()
@@ -305,7 +308,7 @@ def trainIters(
                     epoch, n_epoch, print_loss_avg, loss_valid
                 )
             )
-            print(82*"-")
+            print(83*"-")
             print_loss = 0
 
         else:
@@ -314,7 +317,7 @@ def trainIters(
                     epoch, n_epoch, print_loss_avg, loss_valid
                 )
             )
-            print(60*"-")
+            print(61*"-")
             print_loss = 0
         
 
@@ -408,7 +411,7 @@ else:
 trainIters(
     MODEL_NAME,
     voc,
-    train_loader,
+    # train_loader,
     encoder,
     decoder,
     encoder_optimizer,

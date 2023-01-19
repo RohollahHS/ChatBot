@@ -402,9 +402,9 @@ pairs_valid = loadPrepareDataValid(corpus, CORPUS_NAME, datafile_valid)
 pairs = trimRareWords(voc, pairs, MIN_COUNT)
 pairs_valid = trimRareWordsValid(voc, pairs_valid, MIN_COUNT)
 
-train_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=True)
-valid_loader = DataLoader(pairs_valid, batch_size=BATCH_SIZE, shuffle=False)
+# train_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=False)
+# valid_loader = DataLoader(pairs_valid, batch_size=BATCH_SIZE, shuffle=False)
 # valid_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=True)
 
-print("\nNumber of train samples: ", len(train_loader.dataset))
-print("Number of valid samples: ", len(valid_loader.dataset))
+print("\nNumber of train samples: ", len(pairs))
+print("Number of valid samples: ", len(pairs_valid))
