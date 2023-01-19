@@ -58,17 +58,91 @@ if ("utils.py" in sys.argv[0]) or (len(sys.argv[0]) == 0):
 
 def display_train_loss():
     plt.figure(figsize=(12, 7))
-    plt.plot(check['train_loss_per_iteration'], linewidth=3)
+    plt.plot(check['train_loss_per_epoch'], linewidth=3)
     plt.ylabel('Loss')
     plt.xlabel('Iteration')
     plt.show()
 
 def display_valid_loss():
     plt.figure(figsize=(12, 7))
-    plt.plot(check['valid_loss_per_iteration'], linewidth=3)
+    plt.plot(check['valid_loss_per_epoch'], linewidth=3)
     plt.ylabel('Loss')
     plt.xlabel('Iteration')
     plt.show()
 
 
+class SaveBestModel:
+    """
+    Class to save the best model while training. If the current epoch's
+    validation mAP is higher than the previous least less, then save the
+    model state.
+    """
 
+    def __init__(self, best_valid=1000):
+        self.best_valid = best_valid
+
+    def __call__(
+        self,
+        best_valid,
+        epoch,
+        encoder,
+        decoder,
+        encoder_optimizer,
+        decoder_optimizer,
+        voc,
+        embedding,
+        train_loss_per_epoch,
+        valid_loss_per_epoch,
+        encoder_scheduler,
+        decoder_scheduler,
+        directory
+    ):
+        if best_valid < self.best_valid:
+            self.best_valid = best_valid
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "en": encoder.state_dict(),
+                    "de": decoder.state_dict(),
+                    "en_opt": encoder_optimizer.state_dict(),
+                    "de_opt": decoder_optimizer.state_dict(),
+                    "voc_dict": voc.__dict__,
+                    "embedding": embedding.state_dict(),
+                    "train_loss_per_epoch": train_loss_per_epoch,
+                    "valid_loss_per_epoch": valid_loss_per_epoch,
+                    "encoder_scheduler": encoder_scheduler.state_dict(),
+                    "decoder_scheduler": decoder_scheduler.state_dict()
+                },
+                os.path.join(directory, f"best_model_checkpoint.tar"),
+            )
+
+def save_last_model(
+    epoch,
+    encoder,
+    decoder,
+    encoder_optimizer,
+    decoder_optimizer,
+    voc,
+    embedding,
+    train_loss_per_epoch,
+    valid_loss_per_epoch,
+    encoder_scheduler,
+    decoder_scheduler,
+    directory
+):
+    torch.save(
+        {
+        "epoch": epoch,
+        "en": encoder.state_dict(),
+        "de": decoder.state_dict(),
+        "en_opt": encoder_optimizer.state_dict(),
+        "de_opt": decoder_optimizer.state_dict(),
+        "voc_dict": voc.__dict__,
+        "embedding": embedding.state_dict(),
+        "train_loss_per_epoch": train_loss_per_epoch,
+        "valid_loss_per_epoch": valid_loss_per_epoch,
+        "encoder_scheduler": encoder_scheduler.state_dict(),
+        "decoder_scheduler": decoder_scheduler.state_dict()
+        },
+        os.path.join(directory, f"last_model_checkpoint.tar"),
+    )

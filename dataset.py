@@ -11,6 +11,8 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from torch.utils.data import DataLoader
+
 from config import (
     MAX_LENGTH,
     MIN_COUNT,
@@ -20,7 +22,8 @@ from config import (
     ALL_SETS,
     ALL_LABELS,
     ALL_LABELS_1,
-    FILE_NAME_TEST
+    FILE_NAME_TEST,
+    BATCH_SIZE
 )
 
 
@@ -212,7 +215,7 @@ def filterPairs(pairs):
 
 
 # Using the functions defined above, return a populated voc object and pairs list
-def loadPrepareData(corpus, corpus_name, datafile, save_dir):
+def loadPrepareData(corpus, corpus_name, datafile):
     # print("Start preparing training data ...")
     voc, pairs = readVocs(datafile, corpus_name)
     print("Read {!s} sentence pairs for train".format(len(pairs)))
@@ -231,7 +234,7 @@ def loadPrepareData(corpus, corpus_name, datafile, save_dir):
 
 
 # Using the functions defined above, return a populated voc object and pairs list
-def loadPrepareDataValid(corpus, corpus_name, datafile, save_dir):
+def loadPrepareDataValid(corpus, corpus_name, datafile):
     # print("Start preparing training data ...")
     _, pairs = readVocs(datafile, corpus_name)
     print("Read {!s} sentence pairs for validation".format(len(pairs)))
@@ -363,9 +366,6 @@ def batch2TrainData(voc, pair_batch):
 # corpus_name = "movie-corpus"
 corpus = os.path.join("data", CORPUS_NAME)
 
-# printLines(os.path.join(corpus, FILE_NAME))
-# printLines(os.path.join(corpus, FILE_NAME_VALID))
-
 # Define path to new file
 datafile = os.path.join(corpus, "formatted_movie_lines.txt")
 datafile_valid = os.path.join(corpus, "formatted_movie_lines_valid.txt")
@@ -378,13 +378,10 @@ delimiter = str(codecs.decode(delimiter, "unicode_escape"))
 lines = {}
 conversations = {}
 # Load lines and conversations
-# print("\nProcessing corpus into lines and conversations...")
 questions = loadLinesAndConversations(os.path.join(corpus, FILE_NAME))
 questions_valid = loadLinesAndConversations(os.path.join(corpus, FILE_NAME_VALID))
 
 # Write new csv file
-# print("\nWriting newly formatted file...")
-
 with open(datafile, "w", encoding="utf-8") as outputfile:
     writer = csv.writer(outputfile, delimiter=delimiter, lineterminator="\n")
     for pair in extractSentencePairs(questions):
@@ -396,37 +393,18 @@ with open(datafile_valid, "w", encoding="utf-8") as outputfile:
         writer.writerow(pair)
 
 
-# Print a sample of lines
-# print("\nSample lines from file:")
-# printLines(datafile)
-# printLines(datafile_valid)
-
-
 # Load/Assemble voc and pairs
-save_dir = os.path.join("data", "save")
-voc, pairs = loadPrepareData(corpus, CORPUS_NAME, datafile, save_dir)
-pairs_valid = loadPrepareDataValid(corpus, CORPUS_NAME, datafile_valid, save_dir)
-# Print some pairs to validate
-# print("\npairs:")
-# for pair in pairs[:10]:
-#     print(pair)
+voc, pairs = loadPrepareData(corpus, CORPUS_NAME, datafile)
+pairs_valid = loadPrepareDataValid(corpus, CORPUS_NAME, datafile_valid)
 
 
 # Trim voc and pairs
 pairs = trimRareWords(voc, pairs, MIN_COUNT)
 pairs_valid = trimRareWordsValid(voc, pairs_valid, MIN_COUNT)
 
-print("\nNumber of train samples: ", len(pairs))
-print("Number of valid samples: ", len(pairs_valid))
+train_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=True)
+valid_loader = DataLoader(pairs_valid, batch_size=BATCH_SIZE, shuffle=False)
+# valid_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=True)
 
-
-# # Example for validation
-# small_batch_size = 5
-# batches = batch2TrainData(voc, [random.choice(pairs) for _ in range(small_batch_size)])
-# input_variable, lengths, target_variable, mask, max_target_len = batches
-
-# print("input_variable:", input_variable)
-# print("lengths:", lengths)
-# print("target_variable:", target_variable)
-# print("mask:", mask)
-# print("max_target_len:", max_target_len)
+print("\nNumber of train samples: ", len(train_loader.dataset))
+print("Number of valid samples: ", len(valid_loader.dataset))
