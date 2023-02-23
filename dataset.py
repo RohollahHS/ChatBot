@@ -449,6 +449,6 @@ for pair in pairs[:10]:
 # Trim voc and pairs
 pairs = trimRareWords(voc, pairs, args["min_count"])
 pairs_valid = trimRareWordsValid(voc, pairs_valid, args["min_count"])
-pairs = pairs_valid
+
 print("\nNumber of train samples: ", len(pairs))
 print("Number of valid samples: ", len(pairs_valid))
