@@ -55,7 +55,7 @@ parser.add_argument("--corpus_name", default="WikiQA", type=str)
 parser.add_argument("--file_name", default="WikiQA-train.tsv", type=str)
 parser.add_argument("--file_name_valid", default="WikiQA-dev.tsv", type=str)
 parser.add_argument("--file_name_test", default="WikiQA-test.tsv", type=str)
-parser.add_argument("--out_directories", default="drive/MyDrive/University/Big_Data/HW3", type=str)
+parser.add_argument("--out_directories", default="/content/drive/MyDrive/University/Big_Data/HW3", type=str)
 parser.add_argument("--note", default="", type=str)
 
 args = vars(parser.parse_args())

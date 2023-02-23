@@ -9,7 +9,7 @@ import argparse
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    "--out_directories", default="drive/MyDrive/University/Big_Data/HW3", type=str
+    "--out_directories", default="/content/drive/MyDrive/University/Big_Data/HW3", type=str
 )
 parser.add_argument("--out_dir", default="2023-02-23_11-01-49", type=str)
 
