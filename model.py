@@ -3,44 +3,32 @@ import torch.nn as nn
 from torch import optim
 import torch.nn.functional as F
 
-from config import (
-    DEVICE,
-    LEARNING_RATE,
-    DECODER_LEARNING_RATIO,
-    ATTN_MODEL,
-    HIDDEN_SIZE,
-    ENCODER_N_LAYERS,
-    DECODER_N_LAYERS,
-    DROPOUT,
-    RNN_TYPE,
-    WIEGHT_DECAY,
-    SCHEDULER_LIMESTONES,
-    LR_DECAY_RATIO
-)
+from config import args, DEVICE
+
 from dataset import (
     voc,
 )
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, hidden_size, embedding, n_layers=1, dropout=0):
+    def __init__(self, hidden_size, embedding, n_layers=1, dropout=0, rnn_type=args["rnn_type"]):
         super(EncoderRNN, self).__init__()
         self.n_layers = n_layers
         self.hidden_size = hidden_size
         self.embedding = embedding
 
-        # Initialize GRU; the input_size and hidden_size params are both set to 'hidden_size'
+        # Initialize RNN; the input_size and hidden_size params are both set to 'hidden_size'
         #   because our input size is a word embedding with number of features == hidden_size
-        if RNN_TYPE == "LSTM":
-            self.lstm = nn.LSTM(
+        if rnn_type == "LSTM":
+            self.rnn = nn.LSTM(
                 hidden_size,
                 hidden_size,
                 n_layers,
                 dropout=(0 if n_layers == 1 else dropout),
                 bidirectional=True,
             )
-        elif RNN_TYPE == "GRU":
-            self.gru = nn.GRU(
+        elif rnn_type == "GRU":
+            self.rnn = nn.GRU(
                 hidden_size,
                 hidden_size,
                 n_layers,
@@ -53,16 +41,15 @@ class EncoderRNN(nn.Module):
         embedded = self.embedding(input_seq)
         # Pack padded batch of sequences for RNN module
         packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
-        # Forward pass through GRU
-        if RNN_TYPE == "LSTM":
-            outputs, hidden = self.lstm(packed) # hidden = hn, cn
-        elif RNN_TYPE == "GRU":
-            outputs, hidden = self.gru(packed, hidden)
         
+        # Forward pass through RNN
+        outputs, hidden = self.rnn(packed, hidden)
+
         # Unpack padding
         outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
-        # Sum bidirectional GRU outputs
-        outputs = outputs[:, :, : self.hidden_size] + outputs[:, :, self.hidden_size :]
+        # Sum bidirectional RNN outputs
+        outputs = (outputs[:, :, : self.hidden_size] + 
+                           outputs[:, :, self.hidden_size :])
         # Return output and final hidden state
         return outputs, hidden
 
@@ -114,7 +101,7 @@ class Attn(nn.Module):
 
 class LuongAttnDecoderRNN(nn.Module):
     def __init__(
-        self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1
+        self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1, rnn_type=args["rnn_type"]
     ):
         super(LuongAttnDecoderRNN, self).__init__()
 
@@ -128,15 +115,15 @@ class LuongAttnDecoderRNN(nn.Module):
         # Define layers
         self.embedding = embedding
         self.embedding_dropout = nn.Dropout(dropout)
-        if RNN_TYPE == "LSTM":
-            self.lstm = nn.LSTM(
+        if rnn_type == "LSTM":
+            self.rnn = nn.LSTM(
                 hidden_size,
                 hidden_size,
                 n_layers,
                 dropout=(0 if n_layers == 1 else dropout),
             )
-        elif RNN_TYPE == "GRU":
-            self.gru = nn.GRU(
+        elif rnn_type == "GRU":
+            self.rnn = nn.GRU(
                 hidden_size,
                 hidden_size,
                 n_layers,
@@ -154,17 +141,14 @@ class LuongAttnDecoderRNN(nn.Module):
         embedded = self.embedding(input_step)
         embedded = self.embedding_dropout(embedded)
 
-        # Forward through unidirectional GRU
-        if RNN_TYPE == "LSTM":
-            rnn_output, hidden = self.lstm(embedded, last_hidden) # hidden = hn, cn
-        elif RNN_TYPE == "GRU":
-            rnn_output, hidden = self.gru(embedded, last_hidden)
+        # Forward through unidirectional RNN
+        rnn_output, hidden = self.rnn(embedded, last_hidden)
 
-        # Calculate attention weights from the current GRU output
+        # Calculate attention weights from the current RNN output
         attn_weights = self.attn(rnn_output, encoder_outputs)
         # Multiply attention weights to encoder outputs to get new "weighted sum" context vector
         context = attn_weights.bmm(encoder_outputs.transpose(0, 1))
-        # Concatenate weighted context vector and GRU output using Luong eq. 5
+        # Concatenate weighted context vector and RNN output using Luong eq. 5
         rnn_output = rnn_output.squeeze(0)
         context = context.squeeze(1)
         concat_input = torch.cat((rnn_output, context), 1)
@@ -181,12 +165,12 @@ class LuongAttnDecoderRNN(nn.Module):
 
 # print("Building encoder and decoder ...")
 # Initialize word embeddings
-embedding = nn.Embedding(voc.num_words, HIDDEN_SIZE)
+embedding = nn.Embedding(voc.num_words, args["hidden_size"])
 
 # Initialize encoder & decoder models
-encoder = EncoderRNN(HIDDEN_SIZE, embedding, ENCODER_N_LAYERS, DROPOUT)
+encoder = EncoderRNN(args["hidden_size"], embedding, args["encoder_n_layers"], args["dropout"])
 decoder = LuongAttnDecoderRNN(
-    ATTN_MODEL, embedding, HIDDEN_SIZE, voc.num_words, DECODER_N_LAYERS, DROPOUT
+    args["attn_model"], embedding, args["hidden_size"], voc.num_words, args["decoder_n_layers"], args["dropout"]
 )
 
 # Use appropriate DEVICE
@@ -197,13 +181,21 @@ decoder = decoder.to(DEVICE)
 
 # Initialize optimizers
 # print("Building optimizers ...")
-encoder_optimizer = optim.Adam(encoder.parameters(), lr=LEARNING_RATE, weight_decay=WIEGHT_DECAY)
+encoder_optimizer = optim.Adam(
+    encoder.parameters(), lr=args["lr"], weight_decay=args["weight_decay"]
+)
 decoder_optimizer = optim.Adam(
-    decoder.parameters(), lr=LEARNING_RATE * DECODER_LEARNING_RATIO, weight_decay=WIEGHT_DECAY,
+    decoder.parameters(),
+    lr=args["lr"] * args["decoder_learning_ratio"],
+    weight_decay=args["weight_decay"],
 )
 
-encoder_scheduler = optim.lr_scheduler.MultiStepLR(encoder_optimizer, milestones=SCHEDULER_LIMESTONES, gamma=LR_DECAY_RATIO)
-decoder_scheduler = optim.lr_scheduler.MultiStepLR(decoder_optimizer, milestones=SCHEDULER_LIMESTONES, gamma=LR_DECAY_RATIO)
+encoder_scheduler = optim.lr_scheduler.MultiStepLR(
+    encoder_optimizer, milestones=args["schedule"], gamma=args["lr_decay_ratio"]
+)
+decoder_scheduler = optim.lr_scheduler.MultiStepLR(
+    decoder_optimizer, milestones=args["schedule"], gamma=args["lr_decay_ratio"]
+)
 
 print()
 print("Nubmer of parameters for Encoder:")

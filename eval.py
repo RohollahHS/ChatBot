@@ -8,63 +8,45 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--index", default=0, type=int)
-parser.add_argument("--out_dir", default="outputs", type=str)
-parser.add_argument("--best", default=True, type=bool)
+parser.add_argument(
+    "--out_directories", default="drive/MyDrive/University/Big_Data/HW3", type=str
+)
+parser.add_argument("--out_dir", default="2023-02-23_11-01-49", type=str)
 
-args = parser.parse_args()
+args = vars(parser.parse_args())
 
-LOADFILENAME = args.out_dir
-best = args.best
+USE_CUDA = torch.cuda.is_available()
+DEVICE = torch.device("cuda" if USE_CUDA else "cpu")
+
+last_model_dir = os.path.join(args["out_directories"], args["out_dir"])
+checkpoint = torch.load(
+    os.path.join(last_model_dir, "last_model_checkpoint.tar"), map_location=DEVICE
+)
+
+with open(os.path.join(last_model_dir, "model_details.txt"), "r") as f:
+    lines = f.readlines()
+
+model_details = {}
+print("Model details:")
+for line in lines:
+    if line[0] != "-":
+        key, val = line.split(":")
+        key, val = key.strip(), val.strip()
+        model_details[key] = val
+        print(f"{key:22s}: {val}")
+        print(81 * "-")
+
+HIDDEN_SIZE = int(model_details["hidden_size"])
+ENCODER_N_LAYERS = int(model_details["encoder_n_layers"])
+DECODER_N_LAYERS = int(model_details["decoder_n_layers"])
+MAX_LENGTH = int(model_details["max_length"])
+RNN_TYPE = model_details["rnn_type"]
+DROPOUT = float(model_details["dropout"])
 
 # Default word tokens
 PAD_token = 0  # Used for padding short sentences
 SOS_token = 1  # Start-of-sentence token
 EOS_token = 2  # End-of-sentence token
-USE_CUDA = torch.cuda.is_available()
-DEVICE = torch.device("cuda" if USE_CUDA else "cpu")
-
-files = os.listdir(LOADFILENAME)
-i = 0
-print("Saved models are:\n")
-for l in files:
-    if "txt" not in l:
-        print(f"{i}: {l}\n")
-        i += 1
-i = args.index
-
-model_details = files[i].split(",")
-
-details = {}
-print("\nModel details:")
-for d in model_details:
-    if len(d) != 0:
-        k, v = d.split()
-        print(f"{k}: {v}")
-        details[k] = v
-
-
-all_models = os.listdir(os.path.join(LOADFILENAME, files[i]))
-if best:
-    check = torch.load(
-        os.path.join(LOADFILENAME, files[i], "best_model_checkpoint.tar"),
-        map_location=DEVICE
-    )
-else:
-    check = torch.load(
-        os.path.join(LOADFILENAME, files[i], "last_model_checkpoint.tar"),
-        map_location=DEVICE
-    )
-
-
-RNN_TYPE = details["RNN"]
-HIDDEN_SIZE = int(details["HIDDEN"])
-ENCODER_N_LAYERS = int(details["N_LAYERS"])
-DECODER_N_LAYERS = int(details["N_LAYERS"])
-ATTN_MODEL = details["ATTN"]
-MAX_LENGTH = int(details["MAX_LENGTH"])
-DROPOUT = 0.0
-voc_sd = check["voc_dict"]
 
 
 def indexesFromSentence(voc, sentence):
@@ -98,7 +80,7 @@ class Voc:
 
 
 class EncoderRNN(nn.Module):
-    def __init__(self, hidden_size, embedding, n_layers=1, dropout=0):
+    def __init__(self, hidden_size, embedding, n_layers=1, dropout=0, rnn_type=RNN_TYPE):
         super(EncoderRNN, self).__init__()
         self.n_layers = n_layers
         self.hidden_size = hidden_size
@@ -106,16 +88,16 @@ class EncoderRNN(nn.Module):
 
         # Initialize GRU; the input_size and hidden_size params are both set to 'hidden_size'
         #   because our input size is a word embedding with number of features == hidden_size
-        if RNN_TYPE == "LSTM":
-            self.lstm = nn.LSTM(
+        if rnn_type == "LSTM":
+            self.rnn = nn.LSTM(
                 hidden_size,
                 hidden_size,
                 n_layers,
                 dropout=(0 if n_layers == 1 else dropout),
                 bidirectional=True,
             )
-        elif RNN_TYPE == "GRU":
-            self.gru = nn.GRU(
+        elif rnn_type == "GRU":
+            self.rnn = nn.GRU(
                 hidden_size,
                 hidden_size,
                 n_layers,
@@ -128,15 +110,11 @@ class EncoderRNN(nn.Module):
         embedded = self.embedding(input_seq)
         # Pack padded batch of sequences for RNN module
         packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
-        # Forward pass through GRU
-        if RNN_TYPE == "LSTM":
-            outputs, hidden = self.lstm(packed)  # hidden = hn, cn
-        elif RNN_TYPE == "GRU":
-            outputs, hidden = self.gru(packed, hidden)
-
+        # Forward pass through RNN
+        outputs, hidden = self.rnn(packed, hidden)
         # Unpack padding
         outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
-        # Sum bidirectional GRU outputs
+        # Sum bidirectional RNN outputs
         outputs = outputs[:, :, : self.hidden_size] + outputs[:, :, self.hidden_size :]
         # Return output and final hidden state
         return outputs, hidden
@@ -189,7 +167,7 @@ class Attn(nn.Module):
 
 class LuongAttnDecoderRNN(nn.Module):
     def __init__(
-        self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1
+        self, attn_model, embedding, hidden_size, output_size, n_layers=1, dropout=0.1, rnn_type=RNN_TYPE
     ):
         super(LuongAttnDecoderRNN, self).__init__()
 
@@ -203,15 +181,15 @@ class LuongAttnDecoderRNN(nn.Module):
         # Define layers
         self.embedding = embedding
         self.embedding_dropout = nn.Dropout(dropout)
-        if RNN_TYPE == "LSTM":
-            self.lstm = nn.LSTM(
+        if rnn_type == "LSTM":
+            self.rnn = nn.LSTM(
                 hidden_size,
                 hidden_size,
                 n_layers,
                 dropout=(0 if n_layers == 1 else dropout),
             )
-        elif RNN_TYPE == "GRU":
-            self.gru = nn.GRU(
+        elif rnn_type == "GRU":
+            self.rnn = nn.GRU(
                 hidden_size,
                 hidden_size,
                 n_layers,
@@ -229,17 +207,14 @@ class LuongAttnDecoderRNN(nn.Module):
         embedded = self.embedding(input_step)
         embedded = self.embedding_dropout(embedded)
 
-        # Forward through unidirectional GRU
-        if RNN_TYPE == "LSTM":
-            rnn_output, hidden = self.lstm(embedded, last_hidden)  # hidden = hn, cn
-        elif RNN_TYPE == "GRU":
-            rnn_output, hidden = self.gru(embedded, last_hidden)
+        # Forward through unidirectional RNN
+        rnn_output, hidden = self.rnn(embedded, last_hidden)
 
-        # Calculate attention weights from the current GRU output
+        # Calculate attention weights from the current RNN output
         attn_weights = self.attn(rnn_output, encoder_outputs)
         # Multiply attention weights to encoder outputs to get new "weighted sum" context vector
         context = attn_weights.bmm(encoder_outputs.transpose(0, 1))
-        # Concatenate weighted context vector and GRU output using Luong eq. 5
+        # Concatenate weighted context vector and RNN output using Luong eq. 5
         rnn_output = rnn_output.squeeze(0)
         context = context.squeeze(1)
         concat_input = torch.cat((rnn_output, context), 1)
@@ -275,7 +250,9 @@ class GreedySearchDecoder(nn.Module):
         # Iteratively decode one word token at a time
         for _ in range(max_length):
             # Forward pass through decoder
-            decoder_output, decoder_hidden = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
+            decoder_output, decoder_hidden = self.decoder(
+                decoder_input, decoder_hidden, encoder_outputs
+            )
             # Obtain most likely word token and its softmax score
             decoder_scores, decoder_input = torch.max(decoder_output, dim=1)
             # Record token and score
@@ -287,7 +264,9 @@ class GreedySearchDecoder(nn.Module):
         return all_tokens, all_scores
 
 
-def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
+def evaluate(
+    encoder, decoder, searcher, voc, sentence, max_length
+):
     ### Format input sentence as a batch
     # words -> indexes
     indexes_batch = [indexesFromSentence(voc, sentence)]
@@ -307,19 +286,22 @@ def evaluate(encoder, decoder, searcher, voc, sentence, max_length=MAX_LENGTH):
 
 def evaluateInput(encoder, decoder, searcher, voc):
     input_sentence = "how much is tablespoon of water?"
-    while(1):
+    while 1:
         try:
             # Get input sentence
-            input_sentence = input('> ')
+            input_sentence = input("> ")
             # Check if it is quit case
-            if input_sentence == 'q' or input_sentence == 'quit': break
+            if input_sentence == "q" or input_sentence == "quit":
+                break
             # Normalize sentence
             input_sentence = normalizeString(input_sentence)
             # Evaluate sentence
-            output_words = evaluate(encoder, decoder, searcher, voc, input_sentence)
+            output_words = evaluate(encoder, decoder, searcher, voc, input_sentence, MAX_LENGTH)
             # Format and print response sentence
-            output_words[:] = [x for x in output_words if not (x == 'EOS' or x == 'PAD')]
-            print('Bot:', ' '.join(output_words))
+            output_words[:] = [
+                x for x in output_words if not (x == "EOS" or x == "PAD")
+            ]
+            print("Bot:", " ".join(output_words))
 
         except KeyError:
             print("Error: Encountered unknown word.")
@@ -328,17 +310,34 @@ def evaluateInput(encoder, decoder, searcher, voc):
 # print("Building encoder and decoder ...")
 # Initialize word embeddings
 voc = Voc("eval")
-print('\nLoading vocabulary')
-voc.__dict__ = voc_sd
+print("\nLoading vocabulary")
+voc.__dict__ = checkpoint["voc_dict"]
 embedding = nn.Embedding(voc.num_words, HIDDEN_SIZE).to(DEVICE)
 
 # Initialize encoder & decoder models
-encoder = EncoderRNN(HIDDEN_SIZE, embedding, ENCODER_N_LAYERS, DROPOUT).to(DEVICE)
-decoder = LuongAttnDecoderRNN(ATTN_MODEL, embedding, HIDDEN_SIZE, voc.num_words, DECODER_N_LAYERS, DROPOUT).to(DEVICE)
+encoder = EncoderRNN(
+    HIDDEN_SIZE,
+    embedding,
+    ENCODER_N_LAYERS,
+    DROPOUT,
+    RNN_TYPE
+).to(DEVICE)
+decoder = LuongAttnDecoderRNN(
+    model_details["attn_model"],
+    embedding,
+    HIDDEN_SIZE,
+    voc.num_words,
+    DECODER_N_LAYERS, 
+    DROPOUT,
+    model_details["rnn_type"]
+).to(DEVICE)
 
-print('Loading embding state dict: ' + str(embedding.load_state_dict(check["embedding"])))
-print('Loading encoder state dict: ' + str(encoder.load_state_dict(check["en"])))
-print('Loading decoder state dict: ' + str(decoder.load_state_dict(check["de"])))
+print(
+    "Loading embding state dict: "
+    + str(embedding.load_state_dict(checkpoint["embedding"]))
+)
+print("Loading encoder state dict: " + str(encoder.load_state_dict(checkpoint["en"])))
+print("Loading decoder state dict: " + str(decoder.load_state_dict(checkpoint["de"])))
 
 # Set dropout layers to eval mode
 embedding.eval()
@@ -351,3 +350,8 @@ searcher = GreedySearchDecoder(encoder, decoder)
 print()
 # Begin chatting (uncomment and run the following line to begin)
 evaluateInput(encoder, decoder, searcher, voc)
+
+"""
+[['where is the world cup in', 'it took place in south africa from june to july .'], 
+['when is the next national election ?', 'the united states presidential election of was the th quadrennial presidential election .']]
+"""

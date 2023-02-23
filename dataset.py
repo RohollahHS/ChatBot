@@ -11,21 +11,10 @@ import json
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torch.utils.data import DataLoader
 
-from config import (
-    MAX_LENGTH,
-    MIN_COUNT,
-    CORPUS_NAME,
-    FILE_NAME,
-    FILE_NAME_VALID,
-    ALL_SETS,
-    ALL_LABELS,
-    ALL_LABELS_1,
-    FILE_NAME_TEST,
-    BATCH_SIZE
-)
+from config import args
 
+plt.style.use("ggplot")
 
 def printLines(file, n=10):
     with open(file, "rb") as datafile:
@@ -38,18 +27,18 @@ def printLines(file, n=10):
 def loadLinesAndConversations(fileName):
     questions = {}
 
-    # just for train this block exucuted if the condition meet
-    if (FILE_NAME in fileName) and ALL_SETS: 
-        df1 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME), delimiter="\t")
-        df2 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME_VALID), delimiter="\t")
-        df3 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME_TEST), delimiter="\t")
-        df = pd.concat([df1, df2, df3])
+    # just for train this block exucuted if the condition is met
+    if (args["file_name"] in fileName) and args["all_sets"]:
+        df1 = pd.read_csv(os.path.join("data", args["corpus_name"], args["file_name"]), delimiter="\t")
+        # df2 = pd.read_csv(os.path.join("data", CORPUS_NAME, FILE_NAME_VALID), delimiter="\t")
+        df3 = pd.read_csv(os.path.join("data", args["corpus_name"], args["file_name_test"]), delimiter="\t")
+        df = pd.concat([df1, df3])
 
     else:
         df = pd.read_csv(fileName, delimiter="\t")
 
     # all questions and answers, wether its labels is 1 or 0
-    if (ALL_LABELS==True) and (ALL_LABELS_1==False):
+    if args["dataset_type"] == "all_labels":
         i = 0
         for d in range(df.shape[0]):
             row = df.iloc[d]
@@ -58,11 +47,10 @@ def loadLinesAndConversations(fileName):
             qa["a"] = row["Sentence"]
             questions[i] = qa
             i += 1
-        
         return questions
-    
+
     # all questions & answers with label 1, even questions that have multiple label 1'
-    elif (ALL_LABELS_1==True) and (ALL_LABELS==False):
+    elif args["dataset_type"] == "all_labels_1":
         i = 0
         for d in range(df.shape[0]):
             row = df.iloc[d]
@@ -72,11 +60,10 @@ def loadLinesAndConversations(fileName):
                 qa["a"] = row["Sentence"]
                 questions[i] = qa
                 i += 1
-        
         return questions
 
     # all questions with label 1, and for each question just one answer exists
-    elif (ALL_LABELS_1==False) and (ALL_LABELS==False):
+    elif args["dataset_type"] == "all_labels_1_distinct":
         for d in range(df.shape[0]):
             row = df.iloc[d]
             Id = row["QuestionID"]
@@ -85,9 +72,28 @@ def loadLinesAndConversations(fileName):
                 qa["q"] = row["Question"]
                 qa["a"] = row["Sentence"]
                 questions[Id] = qa
-        
         return questions
-    
+
+    # all questions with just one answers, and all labels
+    elif args["dataset_type"] == "all_labels_distinct":
+        for d in range(df.shape[0]):
+            row = df.iloc[d]
+            Id = row["QuestionID"]
+            if (row["Label"] == 1) and (Id not in questions.keys()):
+                qa = {}
+                qa["q"] = row["Question"]
+                qa["a"] = row["Sentence"]
+                questions[Id] = qa
+
+        for d in range(df.shape[0]):
+            row = df.iloc[d]
+            Id = row["QuestionID"]
+            if Id not in questions.keys():
+                qa = {}
+                qa["q"] = row["Question"]
+                qa["a"] = row["Sentence"]
+                questions[Id] = qa
+        return questions
 
 
 # Extracts pairs of sentences from conversations
@@ -182,7 +188,7 @@ def normalizeString(s):
 
 
 # Read query/response pairs and return a voc object
-def readVocs(datafile, corpus_name=CORPUS_NAME):
+def readVocs(datafile, corpus_name=args["corpus_name"]):
     # print("Reading lines...")
     # Read the file and split into lines
     lines = open(datafile, encoding="utf-8").read().strip().split("\n")
@@ -195,34 +201,38 @@ def readVocs(datafile, corpus_name=CORPUS_NAME):
 # Returns True iff both sentences in a pair 'p' are under the MAX_LENGTH threshold
 def filterPair(p):
     # Input sequences need to preserve the last word for EOS token
-    return len(p[0].split(" ")) < MAX_LENGTH and len(p[1].split(" ")) < MAX_LENGTH
+    return len(p[0].split(" ")) < args["max_length"] and len(p[1].split(" ")) < args["max_length"]
 
 
 # Filter pairs using filterPair condition
 def filterPairs(pairs):
-    # ql = []
-    # al = []
-    # for p in pairs:
-    #     ql.append(len(p[0].split()))
-    #     al.append(len(p[1].split()))
-    # fig, axs = plt.subplots(2, 1, sharey=True, tight_layout=True)
-    # axs[0].hist(ql, bins=10)
-    # axs[1].hist(al, bins=20)
-    # plt.show()
-
     # We can set the number of bins with the *bins* keyword argument.
     return [pair for pair in pairs if filterPair(pair)]
 
 
 # Using the functions defined above, return a populated voc object and pairs list
-def loadPrepareData(corpus, corpus_name, datafile):
+def loadPrepareData(corpus, corpus_name, datafile, save_dir):
     # print("Start preparing training data ...")
     voc, pairs = readVocs(datafile, corpus_name)
+
+    # ql = []
+    # al = []
+    # for p in pairs:
+    #     ql.append(len(p[0].split()))
+    #     al.append(len(p[1].split()))
+    # fig, axs = plt.subplots(2, 1, sharey=True, tight_layout=True, figsize=(12, 7))
+    # axs[0].hist(ql, bins=15)
+    # axs[0].set_title(f"len(dataset)={len(ql)}")
+    # axs[0].set_ylabel("Question lengthes")
+    # axs[1].hist(al, bins=20)
+    # axs[1].set_ylabel("Aanswer lengthes")
+    # plt.show()
+
     print("Read {!s} sentence pairs for train".format(len(pairs)))
     pairs = filterPairs(pairs)
     print(
         "Trimmed to {!s} sentence pairs for train with MAX_LENGTH {}".format(
-            len(pairs), MAX_LENGTH
+            len(pairs), args["max_length"]
         )
     )
     # print("Counting words...")
@@ -234,22 +244,22 @@ def loadPrepareData(corpus, corpus_name, datafile):
 
 
 # Using the functions defined above, return a populated voc object and pairs list
-def loadPrepareDataValid(corpus, corpus_name, datafile):
+def loadPrepareDataValid(corpus, corpus_name, datafile, save_dir):
     # print("Start preparing training data ...")
     _, pairs = readVocs(datafile, corpus_name)
     print("Read {!s} sentence pairs for validation".format(len(pairs)))
     pairs = filterPairs(pairs)
     print(
         "Trimmed to {!s} sentence pairs for validation with MAX_LENGTH {}".format(
-            len(pairs), MAX_LENGTH
+            len(pairs), args["max_length"]
         )
     )
     return pairs
 
 
-def trimRareWords(voc, pairs, MIN_COUNT):
+def trimRareWords(voc, pairs, min_count=args["min_count"]):
     # Trim words used under the MIN_COUNT from the voc
-    voc.trim(MIN_COUNT)
+    voc.trim(min_count)
     # Filter out pairs with trimmed words
     keep_pairs = []
     for pair in pairs:
@@ -274,13 +284,30 @@ def trimRareWords(voc, pairs, MIN_COUNT):
 
     print(
         "Trimmed from {} pairs to {}, {:.4f} of total for train with MIN_COUNT {}".format(
-            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs), MIN_COUNT
+            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs), min_count
         )
     )
+    """
+    ql = []
+    al = []
+    for p in keep_pairs:
+        ql.append(len(p[0].split()))
+        al.append(len(p[1].split()))
+    fig, axs = plt.subplots(2, 1, sharey=True, tight_layout=True)
+    max_range = max(ql)
+    axs[0].hist(ql, range=(1, max_range), bins=max_range, density=True, rwidth=0.6)
+    axs[0].set_title(f"len(dataset)={len(ql)}, max_length={MAX_LENGTH}, min_count={min_count}")
+    axs[0].set_ylabel("Question lengthes")
+    #axs[0].set_xticks([i+0.5 for i in range(1, max_range)], range(1, max_range))
+    max_range = max(al)
+    axs[1].hist(al, range=(1, max_range), bins=max_range, density=True, rwidth=0.6)
+    axs[1].set_ylabel("Aanswer lengthes")
+    #axs[1].set_xticks([i+0.5 for i in range(1, max_range)], range(1, max_range))
+    """
     return keep_pairs
 
 
-def trimRareWordsValid(voc, pairs, MIN_COUNT):
+def trimRareWordsValid(voc, pairs, min_count=args["min_count"]):
     # Filter out pairs with trimmed words
     keep_pairs = []
     for pair in pairs:
@@ -305,7 +332,7 @@ def trimRareWordsValid(voc, pairs, MIN_COUNT):
 
     print(
         "Trimmed from {} pairs to {}, {:.4f} of total for validation with MIN_COUNT {}".format(
-            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs), MIN_COUNT
+            len(pairs), len(keep_pairs), len(keep_pairs) / len(pairs), min_count
         )
     )
     return keep_pairs
@@ -364,7 +391,10 @@ def batch2TrainData(voc, pair_batch):
 
 
 # corpus_name = "movie-corpus"
-corpus = os.path.join("data", CORPUS_NAME)
+corpus = os.path.join("data", args["corpus_name"])
+
+# printLines(os.path.join(corpus, args["file_name"]))
+# printLines(os.path.join(corpus, args["file_name_valid"]))
 
 # Define path to new file
 datafile = os.path.join(corpus, "formatted_movie_lines.txt")
@@ -378,10 +408,13 @@ delimiter = str(codecs.decode(delimiter, "unicode_escape"))
 lines = {}
 conversations = {}
 # Load lines and conversations
-questions = loadLinesAndConversations(os.path.join(corpus, FILE_NAME))
-questions_valid = loadLinesAndConversations(os.path.join(corpus, FILE_NAME_VALID))
+# print("\nProcessing corpus into lines and conversations...")
+questions = loadLinesAndConversations(os.path.join(corpus, args["file_name"]))
+questions_valid = loadLinesAndConversations(os.path.join(corpus, args["file_name_valid"]))
 
 # Write new csv file
+# print("\nWriting newly formatted file...")
+
 with open(datafile, "w", encoding="utf-8") as outputfile:
     writer = csv.writer(outputfile, delimiter=delimiter, lineterminator="\n")
     for pair in extractSentencePairs(questions):
@@ -393,18 +426,29 @@ with open(datafile_valid, "w", encoding="utf-8") as outputfile:
         writer.writerow(pair)
 
 
-# Load/Assemble voc and pairs
-voc, pairs = loadPrepareData(corpus, CORPUS_NAME, datafile)
-pairs_valid = loadPrepareDataValid(corpus, CORPUS_NAME, datafile_valid)
+# Print a sample of lines
+# print("\nSample lines from file:")
+# printLines(datafile)
+# printLines(datafile_valid)
 
+
+# Load/Assemble voc and pairs
+save_dir = os.path.join("data", "save")
+voc, pairs = loadPrepareData(corpus, args["corpus_name"], datafile, save_dir)
+pairs_valid = loadPrepareDataValid(corpus, args["corpus_name"], datafile_valid, save_dir)
+# Print some pairs to validate
+print("\npairs:")
+for pair in pairs[:10]:
+    print(pair)
+
+# max_range = 21
+# plt.hist(voc.word2count.values(), range=(1, max_range), bins=max_range-1, rwidth=0.6)
+# plt.xticks([i+0.5 for i in range(1, max_range)], range(1, max_range))
+# plt.show()
 
 # Trim voc and pairs
-pairs = trimRareWords(voc, pairs, MIN_COUNT)
-pairs_valid = trimRareWordsValid(voc, pairs_valid, MIN_COUNT)
-
-# train_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=False)
-# valid_loader = DataLoader(pairs_valid, batch_size=BATCH_SIZE, shuffle=False)
-# valid_loader = DataLoader(pairs, batch_size=BATCH_SIZE, shuffle=True)
-
+pairs = trimRareWords(voc, pairs, args["min_count"])
+pairs_valid = trimRareWordsValid(voc, pairs_valid, args["min_count"])
+pairs = pairs_valid
 print("\nNumber of train samples: ", len(pairs))
 print("Number of valid samples: ", len(pairs_valid))

@@ -1,119 +1,86 @@
 import torch
 import argparse
-
-"""
-!python train.py \
---rnn_type \
---attn_model \
---hidden_size \
---encoder_n_layers \
---decoder_n_layers \
---dropout \
---batch_size \
---lr \
---n_epoch \
---weight_decay \
---clip \
---teacher_forcing_ratio \
---decoder_learning_ratio \
---print_every \
---save_every \
---load_file_name \
---valid_every \
---max_length \
---min_count \
---corpus_name \
---file_name \
---file_name_valid \
---out_dir \
---note
-"""
+import os
+import datetime
 
 parser = argparse.ArgumentParser()
 
 # Model options
-parser.add_argument('--rnn_type', default="LSTM", type=str, choices=["GRU", "LSTM"])
-parser.add_argument('--attn_model', default="dot", type=str, choices=["dot", "general", "concat"])
-parser.add_argument('--hidden_size', default=512, type=int)
-parser.add_argument('--encoder_n_layers', default=2, type=int)
-parser.add_argument('--decoder_n_layers', default=2, type=int)
-parser.add_argument('--dropout', default=0.1, type=float)
+parser.add_argument("--rnn_type", default="GRU", type=str, choices=["GRU", "LSTM"])
+parser.add_argument("--attn_model", default="dot", type=str, choices=["dot", "general", "concat"])
+parser.add_argument("--hidden_size", default=512, type=int)
+parser.add_argument("--encoder_n_layers", default=4, type=int)
+parser.add_argument("--decoder_n_layers", default=4, type=int)
+parser.add_argument("--dropout", default=0.1, type=float)
 
 # Training options
-parser.add_argument('--batch_size', default=64, type=int)
-parser.add_argument('--lr', default=0.0001, type=float)
-parser.add_argument('--schedule', nargs='*', default=[40, 60, 80], type=int)
-parser.add_argument('--lr_decay_ratio', default=0.1, type=float)
-parser.add_argument('--n_epoch', default=1000, type=int)
-parser.add_argument('--weight_decay', default=5e-5, type=float)
-parser.add_argument('--clip', default=50.0, type=float)
-parser.add_argument('--teacher_forcing_ratio', default=0.9, type=float)
-parser.add_argument('--decoder_learning_ratio', default=5.0, type=float)
+parser.add_argument("--batch_size", default=64, type=int)
+parser.add_argument("--lr", default=0.0001, type=float)
+parser.add_argument("--schedule", nargs="*", default=[2500], type=int)
+parser.add_argument("--lr_decay_ratio", default=0.1, type=float)
+parser.add_argument("--n_iteration", default=3000, type=int)
+parser.add_argument("--weight_decay", default=5e-5, type=float)
+parser.add_argument("--clip", default=50.0, type=float)
+parser.add_argument("--teacher_forcing_ratio", default=0.8, type=float)
+parser.add_argument("--decoder_learning_ratio", default=5.0, type=float)
+parser.add_argument("--train_mode", default="start", choices=["start", "continue"], type=str)
+parser.add_argument("--last_model_dir", default="2023-02-23_09-40-20", type=str)
+
+parser.add_argument("--print_every", default=1, type=int)
+parser.add_argument("--save_every", default=1, type=int)
+parser.add_argument("--load_file_name", default=None)
+parser.add_argument("--valid_every", default=1, type=int)
+parser.add_argument("--start_save", default=500, type=int)
 
 # Dataset options
-parser.add_argument('--all_labels', default=False, type=bool)
-parser.add_argument('--all_labels_1', default=True, type=bool)
-parser.add_argument('--max_length', default=80, type=int)
-parser.add_argument('--min_count', default=1, type=int)
-parser.add_argument('--corpus_name', default="WikiQA", type=str)
-parser.add_argument('--all_sets', default=False, type=bool)
-parser.add_argument('--file_name', default="WikiQA-train.tsv", type=str)
-parser.add_argument('--file_name_valid', default="WikiQA-dev.tsv", type=str)
-parser.add_argument('--file_name_test', default="WikiQA-test.tsv", type=str)
-parser.add_argument('--out_dir', default="outputs", type=str)
-parser.add_argument('--note', default="", type=str)
+parser.add_argument(
+    "--dataset_type",
+    default="all_labels_distinct",
+    type=str,
+    choices=[
+        "all_labels_distinct",
+        "all_labels",
+        "all_labels_1",
+        "all_labels_1_distinct",
+    ],
+    help="if all_labels_distinct: all distinct questions will be seleted, each question just has one answer"
+    + "if all_labels: all questions will be seleted, each question has multiple answer"
+    + "if all_labels_1: all questions with labels 1 will be selected, each question may has multiple answer"
+    + "if all_labels_1_distinct: all distinct questions with labels 1 will be selected, each question has one answer",
+)
+parser.add_argument("--all_sets", default=True, type=bool)
+parser.add_argument("--max_length", default=40, type=int)
+parser.add_argument("--min_count", default=1, type=int)
+parser.add_argument("--corpus_name", default="WikiQA", type=str)
+parser.add_argument("--file_name", default="WikiQA-train.tsv", type=str)
+parser.add_argument("--file_name_valid", default="WikiQA-dev.tsv", type=str)
+parser.add_argument("--file_name_test", default="WikiQA-test.tsv", type=str)
+parser.add_argument("--out_directories", default="drive/MyDrive/University/Big_Data/HW3", type=str)
+parser.add_argument("--note", default="", type=str)
 
-parser.add_argument('--train_mode', default="start", type=str, choices=["start", "continue"])
-parser.add_argument('--load_file_name', default=None)
-
-args = parser.parse_args()
+args = vars(parser.parse_args())
 
 USE_CUDA = torch.cuda.is_available()
 DEVICE = torch.device("cuda" if USE_CUDA else "cpu")
 
-# Configure models
-RNN_TYPE = args.rnn_type
-ATTN_MODEL = args.attn_model
-HIDDEN_SIZE = args.hidden_size
-ENCODER_N_LAYERS = args.encoder_n_layers
-DECODER_N_LAYERS = args.decoder_n_layers
-DROPOUT = args.dropout
+date_and_time = datetime.datetime.now()
+date_and_time = str(date_and_time).split()
+date = date_and_time[0]
+time = date_and_time[1].split(".")[0].replace(":", "-")
+date_and_time = date + "_" + time
 
-# Configure training/optimization
-BATCH_SIZE = args.batch_size
-LEARNING_RATE = args.lr
-SCHEDULER_LIMESTONES = args.schedule
-LR_DECAY_RATIO = args.lr_decay_ratio
-WIEGHT_DECAY = args.weight_decay
-N_EPOCH = args.n_epoch
-CLIP = args.clip
-TEACHER_FORCING_RATIO = args.teacher_forcing_ratio
-DECODER_LEARNING_RATIO = args.decoder_learning_ratio
+args["out_dir"] = os.path.join(args["out_directories"], date_and_time)
+args["save_dir_name"] = date_and_time
 
-TRAIN_MODE = args.train_mode
-LOADFILENAME = args.load_file_name
+if not os.path.exists(os.path.join(args["out_dir"])):
+    os.makedirs(os.path.join(args["out_dir"]), exist_ok=True)
 
-##### WikiQA Dataset
-ALL_LABELS = args.all_labels
-ALL_LABELS_1 = args.all_labels_1
-MAX_LENGTH = args.max_length  # Maximum sentence length to consider
-MIN_COUNT = args.min_count  # Minimum word count threshold for trimming
-CORPUS_NAME = args.corpus_name
-FILE_NAME = args.file_name
-FILE_NAME_VALID = args.file_name_valid
-FILE_NAME_TEST = args.file_name_test
-OUT_DIR = args.out_dir
-ALL_SETS = args.all_sets
-
-#### Movie-Courpus Dataset
-# CORPUS_NAME = "movie-corpus"
-# # FILE_NAME = "utterances.jsonl"
-# FILE_NAME = "utterances_1000_sample.jsonl"
-# FILE_NAME_VALID = "utterances_valid.jsonl"
-
-MODEL_NAME = f"ALL_LABELS: {ALL_LABELS}, ALL_LABELS_1: {ALL_LABELS_1}, MAX_LENGTH: {MAX_LENGTH}, MIN_COUNT: {MIN_COUNT}, ATTN: {ATTN_MODEL}, RNN: {RNN_TYPE}, HIDDEN: {HIDDEN_SIZE}, N_LAYERS: {ENCODER_N_LAYERS}, BATCH: {BATCH_SIZE}, TEACHER_RATIO: {TEACHER_FORCING_RATIO}, LR: {LEARNING_RATE}, DEC_LR_RATIO: {DECODER_LEARNING_RATIO}, N_EPOCH: {N_EPOCH}, {args.note}".strip()
-
-details = MODEL_NAME.split(',')
-print('\nModel details:')
-for d in details:
-    print(d.strip())
+model_details = open(os.path.join(args["out_dir"], "model_details.txt"), "w")
+print("Model details:")
+for k, v in args.items():
+    model_details.write(f"{k:22s}: {v}\n")
+    model_details.write(81*"-")
+    model_details.write("\n")
+    print(f"{k:22s}: {v}")
+    print(81*"-")
+model_details.close()

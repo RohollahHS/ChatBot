@@ -3,30 +3,15 @@ import torch.nn as nn
 import random
 import os
 
-from config import (
-    DEVICE,
-    MAX_LENGTH,
-    CLIP,
-    TEACHER_FORCING_RATIO,
-    N_EPOCH,
-    MODEL_NAME,
-    HIDDEN_SIZE,
-    ENCODER_N_LAYERS,
-    DECODER_N_LAYERS,
-    BATCH_SIZE,
-    CORPUS_NAME,
-    RNN_TYPE,
-    OUT_DIR,
-    TRAIN_MODE
-)
+from config import args, DEVICE
+
 from dataset import (
     SOS_token,
     batch2TrainData,
     voc,
-    # train_loader,
-    # valid_loader,
     pairs,
-    pairs_valid
+    pairs_valid,
+    save_dir,
 )
 from model import (
     embedding,
@@ -35,7 +20,7 @@ from model import (
     encoder_optimizer,
     decoder_optimizer,
     encoder_scheduler,
-    decoder_scheduler
+    decoder_scheduler,
 )
 from utils import SaveBestModel, save_last_model
 
@@ -61,7 +46,7 @@ def train(
     decoder_optimizer,
     batch_size,
     clip,
-    max_length=MAX_LENGTH,
+    max_length=args["max_length"],
 ):
     encoder.train()
     decoder.train()
@@ -88,21 +73,19 @@ def train(
     encoder_outputs, encoder_hidden = encoder(input_variable, lengths)
 
     # Create initial decoder input (start with SOS tokens for each sentence)
-    batch_size = len(lengths)
     decoder_input = torch.LongTensor([[SOS_token for _ in range(batch_size)]])
     decoder_input = decoder_input.to(DEVICE)
 
     # Set initial decoder hidden state to the encoder's final hidden state
-    if RNN_TYPE == "LSTM":
-        hn = encoder_hidden[0][: decoder.n_layers]
-        cn = encoder_hidden[1][: decoder.n_layers]
-        decoder_hidden = (hn, cn)
-    elif RNN_TYPE == "GRU":
+    if args["rnn_type"] == "LSTM":
+        ht = encoder_hidden[0][: decoder.n_layers]
+        ct = encoder_hidden[1][: decoder.n_layers]
+        decoder_hidden = (ht, ct)
+    elif args["rnn_type"] == "GRU":
         decoder_hidden = encoder_hidden[: decoder.n_layers]
-    
 
-    # Determine if we are using teacher forcing this epoch
-    use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
+    # Determine if we are using teacher forcing this iteration
+    use_teacher_forcing = True if random.random() < args["teacher_forcing_ratio"] else False
 
     # Forward batch of sequences through decoder one time step at a time
     if use_teacher_forcing:
@@ -132,7 +115,6 @@ def train(
             print_losses.append(mask_loss.item() * nTotal)
             n_totals += nTotal
 
-
     # Perform backpropatation
     loss.backward()
 
@@ -149,16 +131,155 @@ def train(
 
     return sum(print_losses) / n_totals
 
+
+def trainIters(
+    directory,
+    voc,
+    pairs,
+    encoder,
+    decoder,
+    encoder_optimizer,
+    decoder_optimizer,
+    embedding,
+    encoder_n_layers,
+    decoder_n_layers,
+    save_dir,
+    n_iteration,
+    batch_size,
+    print_every,
+    save_every,
+    clip,
+    corpus_name,
+    loadfilename,
+):
+
+    # Load batches for each iteration
+    training_batches = [
+        batch2TrainData(voc, [random.choice(pairs) for _ in range(batch_size)])
+        for _ in range(n_iteration)
+    ]
+
+    # Initializations
+    start_iteration = 1
+    print_loss = 0
+    if args["train_mode"] == "continue":
+        start_iteration = checkpoint["iteration"] + 1
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    # Training loop
+    for iteration in range(start_iteration, n_iteration + 1):
+        training_batch = training_batches[iteration - 1]
+        # Extract fields from batch
+        input_variable, lengths, target_variable, mask, max_target_len = training_batch
+
+        # Run a training iteration with batch
+        loss = train(
+            input_variable,
+            lengths,
+            target_variable,
+            mask,
+            max_target_len,
+            encoder,
+            decoder,
+            embedding,
+            encoder_optimizer,
+            decoder_optimizer,
+            batch_size,
+            clip,
+        )
+        print_loss += loss
+
+        with torch.no_grad():
+            loss_valid = validIters()
+
+        train_loss_txt = open(f"{args['out_dir']}/train_loss.txt", "a")
+        valid_loss_txt = open(f"{args['out_dir']}/valid_loss.txt", "a")
+        train_loss_txt.write(f"{iteration}: {loss:.4f} | ")
+        valid_loss_txt.write(f"{iteration}: {loss_valid:.4f} | ")
+        train_loss_txt.close()
+        valid_loss_txt.close()
+
+        train_loss_per_iteration.append(loss)
+        valid_loss_per_iteration.append(loss_valid)
+
+        # Print progress
+        if (iteration >= args["start_save"]) and (loss_valid < save_best_model.best_valid):
+            print_loss_avg = print_loss / print_every
+            print(
+                "| Iteration: {:4}/{} | Train loss: {:.4f} | Valid loss: {:.4f} | Save best model ... |".format(
+                    iteration, n_iteration, print_loss_avg, loss_valid
+                )
+            )
+            print(
+                "+" + 22 * "-" + "+" + 20 * "-" + "+" + 20 * "-" + "+" + 21 * "-" + "+"
+            )
+            print_loss = 0
+            save_best_model(
+                loss_valid,
+                iteration,
+                encoder,
+                decoder,
+                encoder_optimizer,
+                decoder_optimizer,
+                voc,
+                embedding,
+                train_loss_per_iteration,
+                valid_loss_per_iteration,
+                encoder_scheduler,
+                decoder_scheduler,
+                directory,
+            )
+            save_last_model(
+                iteration,
+                encoder,
+                decoder,
+                encoder_optimizer,
+                decoder_optimizer,
+                voc,
+                embedding,
+                train_loss_per_iteration,
+                valid_loss_per_iteration,
+                encoder_scheduler,
+                decoder_scheduler,
+                directory,
+            )
+        else:
+            print_loss_avg = print_loss / print_every
+            print(
+                "| Iteration: {:4}/{} | Train loss: {:.4f} | Valid loss: {:.4f} |".format(
+                    iteration, n_iteration, print_loss_avg, loss_valid
+                )
+            )
+            print("+" + 22 * "-" + "+" + 20 * "-" + "+" + 20 * "-" + "+")
+            print_loss = 0
+
+            save_last_model(
+                iteration,
+                encoder,
+                decoder,
+                encoder_optimizer,
+                decoder_optimizer,
+                voc,
+                embedding,
+                train_loss_per_iteration,
+                valid_loss_per_iteration,
+                encoder_scheduler,
+                decoder_scheduler,
+                directory,
+            )
+
+
 def validIters():
+    batch_size_valid = 1
     encoder.eval()
     decoder.eval()
-
     print_loss = 0
-    batches = [pairs_valid[i:i+BATCH_SIZE] for i in range(0, len(pairs_valid), BATCH_SIZE)]
-    for batch in batches:
-        valid_batch = batch2TrainData(voc, batch)
-        input_variable, lengths, target_variable, mask, max_target_len = valid_batch
-        
+    for i in range(len(pairs_valid)):
+        valid_sample = [batch2TrainData(voc, pairs_valid[i : i + 1])]
+        input_variable, lengths, target_variable, mask, max_target_len = valid_sample[0]
+        print_loss = 0
         loss = valid(
             input_variable,
             lengths,
@@ -167,14 +288,12 @@ def validIters():
             max_target_len,
             encoder,
             decoder,
+            batch_size_valid,
         )
 
         print_loss += loss
-    
-    if len(batches) == 0:
-        return 0
-    
-    return print_loss / len(batches)
+
+    return print_loss
 
 
 def valid(
@@ -185,7 +304,8 @@ def valid(
     max_target_len,
     encoder,
     decoder,
-    max_length=MAX_LENGTH,
+    batch_size,
+    max_length=args["max_length"],
 ):
     # Set DEVICE options
     input_variable = input_variable.to(DEVICE)
@@ -203,16 +323,15 @@ def valid(
     encoder_outputs, encoder_hidden = encoder(input_variable, lengths)
 
     # Create initial decoder input (start with SOS tokens for each sentence)
-    batch_size = len(lengths)
     decoder_input = torch.LongTensor([[SOS_token for _ in range(batch_size)]])
     decoder_input = decoder_input.to(DEVICE)
 
     # Set initial decoder hidden state to the encoder's final hidden state
-    if RNN_TYPE == "LSTM":
-        hn = encoder_hidden[0][: decoder.n_layers]
-        cn = encoder_hidden[1][: decoder.n_layers]
-        decoder_hidden = (hn, cn)
-    elif RNN_TYPE == "GRU":
+    if args["rnn_type"] == "LSTM":
+        ht = encoder_hidden[0][: decoder.n_layers]
+        ct = encoder_hidden[1][: decoder.n_layers]
+        decoder_hidden = (ht, ct)
+    elif args["rnn_type"] == "GRU":
         decoder_hidden = encoder_hidden[: decoder.n_layers]
 
     for t in range(max_target_len):
@@ -232,139 +351,11 @@ def valid(
     return sum(print_losses) / n_totals
 
 
-def trainIters(
-    model_name,
-    voc,
-    # train_loader,
-    encoder,
-    decoder,
-    encoder_optimizer,
-    decoder_optimizer,
-    embedding,
-    encoder_n_layers,
-    decoder_n_layers,
-    n_epoch,
-    batch_size,
-    clip,
-    corpus_name,
-):
-
-    # Initializations
-    start_epoch = 1
-    if TRAIN_MODE == "continue":
-        start_epoch = checkpoint["epoch"] + 1
-
-    directory = os.path.join(
-        OUT_DIR,
-        model_name.replace(', ', '-').replace(': ', '_').replace(',', '').strip(),
+if args["train_mode"] == "continue":
+    last_model_dir = os.path.join(args["out_directories"], args["last_model_dir"])
+    checkpoint = torch.load(
+        os.path.join(last_model_dir, "last_model_checkpoint.tar"), map_location=DEVICE
     )
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    print_loss = 0
-    for epoch in range(start_epoch, n_epoch + 1):
-        random.shuffle(pairs)
-        batches = [pairs[i:i+BATCH_SIZE] for i in range(0, len(pairs), BATCH_SIZE)]
-        for batch in batches:
-            training_batch = batch2TrainData(voc, batch)
-            input_variable, lengths, target_variable, mask, max_target_len = training_batch
-
-            # Run a training epoch with batch
-            loss = train(
-                input_variable,
-                lengths,
-                target_variable,
-                mask,
-                max_target_len,
-                encoder,
-                decoder,
-                embedding,
-                encoder_optimizer,
-                decoder_optimizer,
-                batch_size,
-                clip,
-            )
-            print_loss += loss
-
-        print_loss_avg = print_loss / len(batches)
-
-        with torch.no_grad():
-            loss_valid = validIters()
-
-        train_loss_txt = open(f'{OUT_DIR}/train_loss.txt', 'a')
-        valid_loss_txt = open(f'{OUT_DIR}/valid_loss.txt', 'a')
-        train_loss_txt.write(f'{epoch}: {loss:.4f} | ')
-        valid_loss_txt.write(f'{epoch}: {loss_valid:.4f} | ')
-        train_loss_txt.close()
-        valid_loss_txt.close()
-        
-        train_loss_per_epoch.append(loss)
-        valid_loss_per_epoch.append(loss_valid)
-
-        # Print progress
-        if loss_valid < save_best_model.best_valid:
-            print(
-                "| Epoch: {:3}/{:<3} | Train loss: {:.4f} | Valid loss: {:.4f} | Save best model ... |".format(
-                    epoch, n_epoch, print_loss_avg, loss_valid
-                )
-            )
-            print(83*"-")
-            print_loss = 0
-
-        else:
-            print(
-                "| Epoch: {:3}/{:<3} | Train loss: {:.4f} | Valid loss: {:.4f} |".format(
-                    epoch, n_epoch, print_loss_avg, loss_valid
-                )
-            )
-            print(61*"-")
-            print_loss = 0
-        
-
-        # Save checkpoint
-        save_best_model(
-                loss_valid,
-                epoch,
-                encoder,
-                decoder,
-                encoder_optimizer,
-                decoder_optimizer,
-                voc,
-                embedding,
-                train_loss_per_epoch,
-                valid_loss_per_epoch,
-                encoder_scheduler,
-                decoder_scheduler,
-                directory
-            )
-
-        # saving last model
-        save_last_model(
-            epoch,
-            encoder,
-            decoder,
-            encoder_optimizer,
-            decoder_optimizer,
-            voc,
-            embedding,
-            train_loss_per_epoch,
-            valid_loss_per_epoch,
-            encoder_scheduler,
-            decoder_scheduler,
-            directory
-        )
-
-
-# Load model if a LOADFILENAME is provided
-if TRAIN_MODE == "continue":
-    save_dir = os.path.join(
-        OUT_DIR,
-        MODEL_NAME.replace(', ', '-').replace(': ', '_').replace(',', '').strip(),
-    )
-    # If loading on same machine the model was trained on
-    checkpoint = torch.load(os.path.join(save_dir, "last_model_checkpoint.tar"), map_location=DEVICE)
-    # If loading a model trained on GPU to CPU
-    # checkpoint = torch.load(LOADFILENAME, map_location=torch.DEVICE('cpu'))
     encoder_sd = checkpoint["en"]
     decoder_sd = checkpoint["de"]
     encoder_optimizer_sd = checkpoint["en_opt"]
@@ -373,9 +364,11 @@ if TRAIN_MODE == "continue":
     encoder_scheduler_sd = checkpoint["encoder_scheduler"]
     decoder_scheduler_sd = checkpoint["decoder_scheduler"]
 
-    save_best_model = SaveBestModel(best_valid=checkpoint["valid_loss_per_epoch"][-1])
-    train_loss_per_epoch = checkpoint["train_loss_per_epoch"]
-    valid_loss_per_epoch = checkpoint["valid_loss_per_epoch"]
+    save_best_model = SaveBestModel(
+        best_valid=checkpoint["valid_loss_per_iteration"][-1]
+    )
+    train_loss_per_iteration = checkpoint["train_loss_per_iteration"]
+    valid_loss_per_iteration = checkpoint["valid_loss_per_iteration"]
 
     voc.__dict__ = checkpoint["voc_dict"]
     embedding.load_state_dict(embedding_sd)
@@ -393,34 +386,38 @@ if TRAIN_MODE == "continue":
 
 else:
     save_best_model = SaveBestModel()
-    train_loss_per_epoch = []
-    valid_loss_per_epoch = []
+    train_loss_per_iteration = []
+    valid_loss_per_iteration = []
 
-    train_loss_txt = open(f'{OUT_DIR}/train_loss.txt', 'a')
-    valid_loss_txt = open(f'{OUT_DIR}/valid_loss.txt', 'a')
+    train_loss_txt = open(f"{args['out_dir']}/train_loss.txt", "a")
+    valid_loss_txt = open(f"{args['out_dir']}/valid_loss.txt", "a")
 
-    train_loss_txt.write(f'\n{MODEL_NAME}\n')
-    valid_loss_txt.write(f'\n{MODEL_NAME}\n')
+    train_loss_txt.write(f"\n{args['save_dir_name']}\n")
+    valid_loss_txt.write(f"\n{args['save_dir_name']}\n")
 
     train_loss_txt.close()
     valid_loss_txt.close()
     print("Starting Training!\n")
 
 
-# Run training epochs
+# Run training iterations
 trainIters(
-    MODEL_NAME,
+    args["out_dir"],
     voc,
-    # train_loader,
+    pairs,
     encoder,
     decoder,
     encoder_optimizer,
     decoder_optimizer,
     embedding,
-    ENCODER_N_LAYERS,
-    DECODER_N_LAYERS,
-    N_EPOCH,
-    BATCH_SIZE,
-    CLIP,
-    CORPUS_NAME,
+    args["encoder_n_layers"],
+    args["decoder_n_layers"],
+    save_dir,
+    args["n_iteration"],
+    args["batch_size"],
+    args["print_every"],
+    args["save_every"],
+    args["clip"],
+    args["corpus_name"],
+    args["load_file_name"],
 )
