@@ -105,7 +105,7 @@ FILE_NAME_TEST = args.file_name_test
 OUT_DIR = args.out_dir
 ALL_SETS = args.all_sets
 
-##### Movie-Courpus Dataset
+#### Movie-Courpus Dataset
 # CORPUS_NAME = "movie-corpus"
 # # FILE_NAME = "utterances.jsonl"
 # FILE_NAME = "utterances_1000_sample.jsonl"
